@@ -1,0 +1,3 @@
+[submodule "nanogui"]
+	path = nanogui
+	url = git@github.com:DaleGia/nanogui.git
