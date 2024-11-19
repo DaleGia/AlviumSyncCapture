@@ -1,3 +1,6 @@
 [submodule "nanogui"]
 	path = nanogui
 	url = git@github.com:DaleGia/nanogui.git
+[submodule "AlliedVisionAlvium"]
+	path = AlliedVisionAlvium
+	url = git@github.com:DaleGia/AlliedVisionAlvium.git
