@@ -4,7 +4,7 @@ class GUICaptureWindow : public nanogui::Window
 {
 public:
     GUICaptureWindow(
-        Widget *parent,
+        Widget* parent,
         int height,
         int width,
         int positionx,
@@ -21,13 +21,13 @@ public:
 
         this->acquireButton = new nanogui::Button(
             this,
-            "Start Image Reception");
+            "Start acquiring images");
         this->acquireButton->setBackgroundColor(
             GREEN);
 
         this->recordingButton = new nanogui::Button(
             this,
-            "Start Recording");
+            "Start saving images");
         this->recordingButton->setBackgroundColor(
             GREEN);
 
@@ -39,7 +39,7 @@ public:
                 {
                     char buffer[1000];
                     std::string string;
-                    FILE *output = popen("zenity --file-selection --directory", "r");
+                    FILE* output = popen("zenity --file-selection --directory", "r");
                     if (output == nullptr)
                     {
                         throw std::runtime_error("popen() failed -- could not launch zenity!");
@@ -60,26 +60,25 @@ public:
 
                         imageSaveLocation->setValue(string);
                     }
-                }
-                catch (const std::exception &e)
+                } catch (const std::exception& e)
                 {
                     std::cerr << e.what() << '\n';
                 }
             });
 
         this->imageSaveLocation =
-            new nanogui::TextBox(this, "No save location set...");
+            new nanogui::TextBox(this, "");
         this->imageSaveLocation->setEditable(false);
     };
 
-    nanogui::Button *acquireButton;
-    nanogui::Button *recordingButton;
-    nanogui::TextBox *connectedCamera;
-    nanogui::TextBox *imageSaveLocation = nullptr;
+    nanogui::Button* acquireButton;
+    nanogui::Button* recordingButton;
+    nanogui::TextBox* connectedCamera;
+    nanogui::TextBox* imageSaveLocation = nullptr;
 
     const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
     const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);
 
 private:
-    nanogui::Button *fileDialogButton = nullptr;
+    nanogui::Button* fileDialogButton = nullptr;
 };

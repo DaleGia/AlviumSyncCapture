@@ -5,9 +5,9 @@
  * @brief
  * TODO add me
  */
-/*****************************************************************************/
-/*INLCUDES                                                                   */
-/*****************************************************************************/
+ /*****************************************************************************/
+ /*INLCUDES                                                                   */
+ /*****************************************************************************/
 #include "unistd.h"
 #include <iostream>
 
@@ -16,168 +16,330 @@
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 
-static const uint32_t IMAGEBUFFERSIZE = 10;
 
-std::atomic<bool> isImageReceptionEnabled = false;
-std::atomic<bool> isRecordingEnabled = false;
-std::atomic<uint64_t> receivedFramesCount = 0;
-std::atomic<uint64_t> savedFramesCount = 0;
-std::string currentSavePath;
 
-std::atomic<double> currentExposureUs = 0;
-std::atomic<double> currentGainDb = 0;
 
-std::atomic<uint64_t> lastGNSSTimestamp = 0;
-std::atomic<uint64_t> lastCameraPPSTimestamp = 0;
 
-OpenCVFITS fits;
-
-void updateCameraConfig(GUIScreen &screen, AlliedVisionAlvium &camera);
-void frameReceviedFunction(
-    cv::Mat frame,
-    uint64_t cameraTimestamp,
-    uint64_t cameraFrameId,
-    void *arg);
 /*****************************************************************************/
-/* MAIN                                                                      */
+/* Class                                                                      */
 /*****************************************************************************/
-int main(int argc, const char **argv)
+class AlviumSyncCapture
 {
+public:
+    AlviumSyncCapture() {};
+
+    void run(void)
+    {
+        /* Try to connect to a camera. Fail if you cannot */
+        if (false == camera.connect())
+        {
+            return;
+        }
+
+        std::string cameraName = camera.getName();
+        std::cout << cameraName << std::endl;
+        this->screen.capture->connectedCamera->setValue(cameraName);
+
+        /* Set what happens when the acquise image button is pushed */
+        this->screen.capture->acquireButton->setCallback(
+            [this]
+            {
+                if (false == isImageReceptionEnabled)
+                {
+                    /* We are not currently capturing... Lets start capturing*/
+                    /* update the currently captureured camera values */
+                    this->updateCameracapture();
+
+                    /* start the camera acquisition */
+                    if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncCapture::frameReceviedFunction, this))
+                    {
+                        this->isImageReceptionEnabled = true;
+                        this->screen.capture->acquireButton->setCaption("Stop image acquisition");
+                        this->screen.capture->acquireButton->setBackgroundColor(
+                            this->screen.capture->RED);
+                        std::cout << "Started image acquisition... " << std::endl;
+                    }
+                    else
+                    {
+                        std::cerr << "Unable to start image acquisition... " << std::endl;
+                    }
+                }
+                else
+                {
+                    /* We are currently capturing... Lets stop capturing*/
+                    /* Stop the camera acquisition */
+                    if (true == camera.stopAcquisition())
+                    {
+                        this->isImageReceptionEnabled = false;
+                        this->screen.capture->acquireButton->setCaption("Start image acquisition");
+                        this->screen.capture->acquireButton->setBackgroundColor(
+                            this->screen.capture->GREEN);
+                        std::cout << "Stopped image acquisition... " << std::endl;
+                    }
+
+                    /* update the currently captureured camera values */
+                    this->updateCameracapture();
+                }
+            });
+
+        /* Set what happens when the recording button is pushed */
+        screen.capture->recordingButton->setCallback(
+            [this]
+            {
+
+                if (false == this->isSavingEnable)
+                {
+                    if (screen.capture->imageSaveLocation->value() == "")
+                    {
+                        std::cerr << "No save location selected... please select one in the captureuration menu..." << std::endl;
+                    }
+                    else
+                    {
+                        /* Get the current save location */
+                        std::string directory;
+                        directory = screen.capture->imageSaveLocation->value();
+                        this->currentSavePath = directory;
+
+                        // Get current time with milliseconds
+                        auto now = std::chrono::system_clock::now();
+                        auto milliseconds =
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+                        auto now_c = std::chrono::system_clock::to_time_t(now);
+
+                        // Format date and time string (YYYYMMDD_HHMMSS_mmm)
+                        std::stringstream filename_stream;
+                        filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
+                            << std::setfill('0') << std::setw(3) << milliseconds.count();
+                        if (false == this->createNewSaveDirectory(filename_stream.str()))
+                        {
+                            return;
+                        }
+
+                        if (false == this->fits.createFITS(this->currentSavePath + "/" + filename_stream.str() + ".fit"))
+                        {
+                            std::cerr << "Could not create fits file" << std::endl;
+                            return;
+                        }
+
+                        this->isSavingEnable = true;
+                        screen.capture->recordingButton->setCaption("Stop Recording");
+                        screen.capture->recordingButton->setBackgroundColor(
+                            screen.capture->RED);
+                        std::cout << "Started to record... " << std::endl;
+                    }
+
+                }
+                else
+                {
+                    std::string string;
+                    this->isSavingEnable = false;
+
+                    this->fits.closeFITS();
+
+                    screen.capture->recordingButton->setCaption("Start Recording");
+                    screen.capture->recordingButton->setBackgroundColor(
+                        screen.capture->GREEN);
+                    std::cout << "Stopped recording... " << std::endl;
+                }
+            });
+
+        /* Set what happens when the pixel format is edited */
+        screen.cameraWindow->pixelFormat->setCallback(
+            [this]
+            (std::string value)
+            {
+                if (false == this->camera.setFeature("PixelFormat", value))
+                {
+                    std::cerr << "Could not set bitDepth to " << value << std::endl;
+                }
+                else
+                {
+                    std::cout << "Set PixelFormat to " << value << std::endl;
+                }
+
+                this->updateCameracapture();
+                return true;
+            });
+        /* Set what happens when Gain is edited */
+        screen.cameraWindow->gain->setCallback(
+            [this]
+            (double value)
+            {
+                if (false == this->camera.setFeature("Gain", std::to_string(value)))
+                {
+                    std::cerr << "Could not set gain..." << std::endl;
+                }
+                else
+                {
+                    std::cout << "Set gain to " << value << std::endl;
+                }
+
+                this->updateCameracapture();
+            });
+
+        /* Set what happens when exposure is edited */
+        screen.cameraWindow->exposure->setCallback(
+            [this]
+            (double value)
+            {
+                if (false == camera.setFeature("ExposureTime", std::to_string(value)))
+                {
+                    std::cerr << "Could not set exposure..." << std::endl;
+                }
+                else
+                {
+                    std::cout << "Set exposure to " << value << std::endl;
+                }
+
+                this->updateCameracapture();
+            });
+
+        /* Create the screen and update the connected camera */
+        this->updateCameracapture();
+        this->screen.start();
+
+    }
+
+private:
     GUIScreen screen;
     GNSS gnss;
     AlliedVisionAlvium camera;
 
-    /* Try to connect to a camera. Fail if you cannot */
-    if (false == camera.connect())
+    std::atomic<bool> isImageReceptionEnabled = false;
+    std::atomic<bool> isSavingEnable = false;
+    std::atomic<uint64_t> receivedFramesCount = 0;
+    std::atomic<uint64_t> savedFramesCount = 0;
+    std::string currentSavePath;
+
+    std::atomic<double> currentExposureUs = 0;
+    std::atomic<double> currentGainDb = 0;
+
+    std::atomic<uint64_t> lastGNSSTimestamp = 0;
+    std::atomic<uint64_t> lastCameraPPSTimestamp = 0;
+
+    static const uint32_t IMAGEBUFFERSIZE = 10;
+    OpenCVFITS fits;
+
+    static void frameReceviedFunction(
+        cv::Mat frame,
+        uint64_t cameraTimestamp,
+        uint64_t cameraFrameId,
+        void* arg)
     {
-        return -1;
+        // Get current time with milliseconds
+        auto now = std::chrono::system_clock::now();
+        AlviumSyncCapture* self = (AlviumSyncCapture*)arg;
+        self->receivedFramesCount++;
+
+        if (self->isSavingEnable)
+        {
+            // Convert to time_since_epoch in microseconds
+            auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch());
+            // Extract the number of microseconds
+            auto timestamp = microseconds.count();
+
+            if (false == self->fits.addMat2FITS(frame))
+            {
+                std::cerr << "Could not add image to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("ExposureTime", self->currentExposureUs))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("Gain", self->currentGainDb))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("FrameID", cameraFrameId))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("cameraImageTimestamp", cameraTimestamp))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", cameraTimestamp))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("cameraLastPPSTimestamp", self->lastCameraPPSTimestamp))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else if (false == self->fits.addKey2FITS("GNSSLastPPSTimestampUTC", self->lastGNSSTimestamp))
+            {
+                std::cerr << "Could not add exposure to fits file " << std::endl;
+            }
+            else
+            {
+                self->savedFramesCount++;
+            }
+        }
     }
 
-    /* Start the GNSS stuff */
-    gnss.start();
-
-    std::string cameraName = camera.getName();
-    std::cout << cameraName << std::endl;
-    screen.capture->connectedCamera->setValue(cameraName);
-
-    /* Create the screen and update the connected camera */
-    screen.start();
-
-    // /* Set what happens when the capture button is pushed */
-    // screen.capture->acquireButton->setCallback(
-    //     [&screen, &camera]
-    //     {
-    //         if (false == isImageReceptionEnabled)
-    //         {
-    //             /* We are not currently capturing... Lets start capturing*/
-    //             /* update the currently configured camera values */
-    //             updateCameraConfig(screen, camera);
-
-    //             /* start the camera acquisition */
-    //             if (true == camera.startAcquisition(IMAGEBUFFERSIZE, frameReceviedFunction, NULL))
-    //             {
-    //                 isImageReceptionEnabled = true;
-    //                 screen.capture->acquireButton->setCaption("Stop image acquisition");
-    //                 screen.capture->acquireButton->setBackgroundColor(
-    //                     screen.capture->RED);
-    //                 std::cout << "Started image acquisition... " << std::endl;
-    //             }
-    //         }
-    //         else
-    //         {
-    //             /* We are currently capturing... Lets stop capturing*/
-    //             /* Stop the camera acquisition */
-    //             if (true == camera.stopAcquisition())
-    //             {
-    //                 isImageReceptionEnabled = false;
-    //                 screen.capture->acquireButton->setCaption("Start image acquisition");
-    //                 screen.capture->acquireButton->setBackgroundColor(
-    //                     screen.capture->GREEN);
-    //                 std::cout << "Stopped image acquisition... " << std::endl;
-    //             }
-    //             /* update the currently configured camera values */
-    //             updateCameraConfig(screen, camera);
-    //         }
-    //     });
-    /* If the screen is exited, it ends up here */
-    return 1;
-}
-
-void frameReceviedFunction(
-    cv::Mat frame,
-    uint64_t cameraTimestamp,
-    uint64_t cameraFrameId,
-    void *arg)
-{
-    // Get current time with milliseconds
-    auto now = std::chrono::system_clock::now();
-
-    receivedFramesCount++;
-
-    if (isRecordingEnabled)
+    void updateCameracapture(void)
     {
-        // Convert to time_since_epoch in microseconds
-        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch());
-        // Extract the number of microseconds
-        auto timestamp = microseconds.count();
-
-        if (false == fits.addMat2FITS(frame))
+        std::string value;
+        if (false == this->camera.getFeature("ExposureTime", value))
         {
-            std::cerr << "Could not add image to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("ExposureTime", currentExposureUs))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("Gain", currentGainDb))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("FrameID", cameraFrameId))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("cameraImageTimestamp", cameraTimestamp))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("systemImageReceptionTimestampUTC", cameraTimestamp))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("cameraLastPPSTimestamp", lastCameraPPSTimestamp))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
-        }
-        else if (false == fits.addKey2FITS("GNSSLastPPSTimestampUTC", lastGNSSTimestamp))
-        {
-            std::cerr << "Could not add exposure to fits file " << std::endl;
+            std::cerr << "Could not get camera exposure" << std::endl;
         }
         else
         {
-            savedFramesCount++;
+            this->screen.cameraWindow->exposure->setValue(std::stod(value));
+        }
+
+        if (false == this->camera.getFeature("Gain", value))
+        {
+            std::cerr << "Could not get camera gain" << std::endl;
+        }
+        else
+        {
+            this->screen.cameraWindow->gain->setValue(std::stod(value));
+        }
+
+        if (false == this->camera.getFeature("PixelFormat", value))
+        {
+            std::cerr << "Could not get camera gain" << std::endl;
+        }
+        else
+        {
+            this->screen.cameraWindow->pixelFormat->setValue(value);
         }
     }
-}
 
-void updateCameraConfig(GUIScreen &screen, AlliedVisionAlvium &camera)
+    bool createNewSaveDirectory(std::string directoryName)
+    {
+        /* We need to create a new directory for the file
+        * save location. Then if we are saving average frames
+        * we save the frame
+        */
+
+        std::string directorypath = this->currentSavePath + directoryName;
+
+
+        /* Create the images and detections subfolders */
+        if (true == std::filesystem::exists(directorypath))
+        {
+            // Directory already exists...
+        }
+        else if (false == std::filesystem::create_directories(directorypath))
+        {
+            std::cerr << "Could not create directory" << directorypath << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+
+};
+
+/*****************************************************************************/
+/* MAIN                                                                      */
+/*****************************************************************************/
+int main(int argc, const char** argv)
 {
-    std::string value;
-    if (false == camera.getFeature("ExposureTime", value))
-    {
-        std::cerr << "Could not get camera exposure" << std::endl;
-    }
-    else
-    {
-        screen.cameraWindow->exposure->setValue(std::stod(value));
-    }
-
-    if (false == camera.getFeature("Gain", value))
-    {
-        std::cerr << "Could not get camera gain" << std::endl;
-    }
-    else
-    {
-        screen.cameraWindow->gain->setValue(std::stod(value));
-    }
+    AlviumSyncCapture alviumSyncCapture;
+    alviumSyncCapture.run();
+    return 1;
 }
