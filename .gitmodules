@@ -4,3 +4,6 @@
 [submodule "AlliedVisionAlvium"]
 	path = AlliedVisionAlvium
 	url = git@github.com:DaleGia/AlliedVisionAlvium.git
+[submodule "OpenCVFITS"]
+	path = OpenCVFITS
+	url = https://github.com/DaleGia/OpenCVFITS.git

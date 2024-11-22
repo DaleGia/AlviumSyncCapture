@@ -6,7 +6,7 @@ class GUICameraWindow : public nanogui::Window
 {
 public:
     GUICameraWindow(
-        Widget* parent,
+        Widget *parent,
         int height,
         int width,
         int positionx,
@@ -17,7 +17,7 @@ public:
         setFixedWidth(width);
         setPosition(position);
 
-        nanogui::GridLayout* cameraLayout =
+        nanogui::GridLayout *cameraLayout =
             new nanogui::GridLayout(
                 nanogui::Orientation::Horizontal,
                 2,
@@ -26,11 +26,11 @@ public:
                 5);
 
         cameraLayout->setColAlignment(
-            { nanogui::Alignment::Maximum,
-             nanogui::Alignment::Fill });
+            {nanogui::Alignment::Maximum,
+             nanogui::Alignment::Fill});
         cameraLayout->setRowAlignment(
-            { nanogui::Alignment::Maximum,
-             nanogui::Alignment::Fill });
+            {nanogui::Alignment::Maximum,
+             nanogui::Alignment::Fill});
         cameraLayout->setSpacing(0, 0);
         this->setLayout(cameraLayout);
 
@@ -41,7 +41,8 @@ public:
         this->syncButton->setBackgroundColor(
             RED);
         new nanogui::Label(this, "Pixel Format:", "sans-bold");
-        pixelFormat = new nanogui::TextBox(this);
+        this->pixelFormat = new nanogui::TextBox(this);
+        this->pixelFormat->setEditable(true);
         new nanogui::Label(this, "Gain (dB):", "sans-bold");
         this->gain = new nanogui::FloatBox<double>(this, 0);
         this->gain->setEditable(true);
@@ -65,21 +66,20 @@ public:
         previewStretchSlider->setValue(100);
     };
 
-    nanogui::TextBox* pixelFormat = nullptr;
-    nanogui::FloatBox<double>* gain = nullptr;
-    nanogui::FloatBox<double>* triggerRate = nullptr;
-    nanogui::FloatBox<double>* exposure = nullptr;
-    nanogui::IntBox<int>* maxPixelValue = nullptr;
-    nanogui::IntBox<int>* minPixelValue = nullptr;
-    nanogui::IntBox<int>* averagePixelValue = nullptr;
-    nanogui::IntBox<int>* framesReceivedValue = nullptr;
-    nanogui::IntBox<int>* framesSavedValue = nullptr;
-    nanogui::Slider* previewStretchSlider = nullptr;
-    nanogui::Button* syncButton;
+    nanogui::TextBox *pixelFormat = nullptr;
+    nanogui::FloatBox<double> *gain = nullptr;
+    nanogui::FloatBox<double> *triggerRate = nullptr;
+    nanogui::FloatBox<double> *exposure = nullptr;
+    nanogui::IntBox<int> *maxPixelValue = nullptr;
+    nanogui::IntBox<int> *minPixelValue = nullptr;
+    nanogui::IntBox<int> *averagePixelValue = nullptr;
+    nanogui::IntBox<int> *framesReceivedValue = nullptr;
+    nanogui::IntBox<int> *framesSavedValue = nullptr;
+    nanogui::Slider *previewStretchSlider = nullptr;
+    nanogui::Button *syncButton;
 
     const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
     const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);
 
 private:
-
 };

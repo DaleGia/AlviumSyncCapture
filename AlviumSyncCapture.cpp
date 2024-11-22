@@ -5,9 +5,9 @@
  * @brief
  * TODO add me
  */
- /*****************************************************************************/
- /*INLCUDES                                                                   */
- /*****************************************************************************/
+/*****************************************************************************/
+/*INLCUDES                                                                   */
+/*****************************************************************************/
 #include "unistd.h"
 #include <iostream>
 
@@ -15,10 +15,7 @@
 #include "GNSS.hpp"
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
-
-
-
-
+#include <opencv2/opencv.hpp>
 
 /*****************************************************************************/
 /* Class                                                                      */
@@ -82,11 +79,111 @@ public:
                 }
             });
 
+        /* Set what happens when the acquise image button is pushed */
+        this->screen.capture->acquireSingleButton->setCallback(
+            [this]
+            {
+                if (false == this->isImageReceptionEnabled)
+                {
+                    cv::Mat image;
+                    uint64_t cameraTimestamp;
+                    uint64_t cameraFrameId;
+                    /* We are not currently capturing... Lets start capturing*/
+                    /* update the currently captureured camera values */
+                    this->updateCameracapture();
+
+                    this->screen.capture->acquireSingleButton->setCaption("Getting Image...");
+                    this->screen.capture->acquireSingleButton->setBackgroundColor(
+                        this->screen.capture->RED);
+                    /* start the camera acquisition */
+                    if (true == this->camera.getSingleFrame(image, cameraFrameId, cameraTimestamp, ACQUIRESINGLEIMAGETIMEOUT_MS))
+                    {
+                        // Get current time with milliseconds
+                        auto now = std::chrono::system_clock::now();
+                        // Convert to time_since_epoch in microseconds
+                        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch());
+                        // Extract the number of microseconds
+                        uint64_t timestamp = systemClockToUTC(now);
+
+                        this->receivedFramesCount++;
+
+                        if (this->isSavingEnable)
+                        {
+                            std::string directory;
+                            directory = screen.capture->imageSaveLocation->value();
+                            this->currentSavePath = directory;
+
+                            auto milliseconds =
+                                std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+                            auto now_c = std::chrono::system_clock::to_time_t(now);
+
+                            // Format date and time string (YYYYMMDD_HHMMSS_mmm)
+                            std::stringstream filename_stream;
+                            filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
+                                            << std::setfill('0') << std::setw(3) << milliseconds.count();
+                            if (false == this->createNewSaveDirectory(filename_stream.str()))
+                            {
+                                return;
+                            }
+
+                            OpenCVFITS singleFits;
+                            if (false == singleFits.createFITS(this->currentSavePath + "/" + filename_stream.str() + ".fit"))
+                            {
+                                std::cerr << "Could not create fits file" << std::endl;
+                            }
+                            else if (false == singleFits.addMat2FITS(image))
+                            {
+                                std::cerr << "Could not add image to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("ExposureTime", this->currentExposureUs))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("Gain", this->currentGainDb))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("FrameID", cameraFrameId))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("cameraImageTimestamp", cameraTimestamp))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("systemImageReceptionTimestampUTC", timestamp))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("cameraLastPPSTimestamp", this->lastCameraPPSTimestamp))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (false == singleFits.addKey2FITS("GNSSLastPPSTimestampUTC", this->lastGNSSTimestamp))
+                            {
+                                std::cerr << "Could not add exposure to fits file " << std::endl;
+                            }
+                            else if (true == singleFits.closeFITS())
+                            {
+                                this->savedFramesCount++;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        std::cerr << "Unable to get single image... " << std::endl;
+                    }
+
+                    this->screen.capture->acquireSingleButton->setCaption("Acquire single image");
+                    this->screen.capture->acquireSingleButton->setBackgroundColor(
+                        this->screen.capture->GREEN);
+                }
+            });
+
         /* Set what happens when the recording button is pushed */
         screen.capture->recordingButton->setCallback(
             [this]
             {
-
                 if (false == this->isSavingEnable)
                 {
                     if (screen.capture->imageSaveLocation->value() == "")
@@ -109,7 +206,7 @@ public:
                         // Format date and time string (YYYYMMDD_HHMMSS_mmm)
                         std::stringstream filename_stream;
                         filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
-                            << std::setfill('0') << std::setw(3) << milliseconds.count();
+                                        << std::setfill('0') << std::setw(3) << milliseconds.count();
                         if (false == this->createNewSaveDirectory(filename_stream.str()))
                         {
                             return;
@@ -127,7 +224,6 @@ public:
                             screen.capture->RED);
                         std::cout << "Started to record... " << std::endl;
                     }
-
                 }
                 else
                 {
@@ -145,8 +241,7 @@ public:
 
         /* Set what happens when the pixel format is edited */
         screen.cameraWindow->pixelFormat->setCallback(
-            [this]
-            (std::string value)
+            [this](std::string value)
             {
                 if (false == this->camera.setFeature("PixelFormat", value))
                 {
@@ -162,8 +257,7 @@ public:
             });
         /* Set what happens when Gain is edited */
         screen.cameraWindow->gain->setCallback(
-            [this]
-            (double value)
+            [this](double value)
             {
                 if (false == this->camera.setFeature("Gain", std::to_string(value)))
                 {
@@ -179,8 +273,7 @@ public:
 
         /* Set what happens when exposure is edited */
         screen.cameraWindow->exposure->setCallback(
-            [this]
-            (double value)
+            [this](double value)
             {
                 if (false == camera.setFeature("ExposureTime", std::to_string(value)))
                 {
@@ -194,10 +287,26 @@ public:
                 this->updateCameracapture();
             });
 
+        /* Set what happens when exposure is edited */
+        screen.cameraWindow->pixelFormat->setCallback(
+            [this](std::string value)
+            {
+                if (false == this->camera.setFeature("PixelFormat", value))
+                {
+                    std::cerr << "Could not set PixelFormat to " << value << " ... " << std::endl;
+                }
+                else
+                {
+                    std::cout << "Set PixelFormat to " << value << std::endl;
+                }
+
+                this->updateCameracapture();
+                return true;
+            });
+
         /* Create the screen and update the connected camera */
         this->updateCameracapture();
         this->screen.start();
-
     }
 
 private:
@@ -218,17 +327,19 @@ private:
     std::atomic<uint64_t> lastCameraPPSTimestamp = 0;
 
     static const uint32_t IMAGEBUFFERSIZE = 10;
+    /* 12 seconds is 10 second exposure max plus 2*/
+    static const uint32_t ACQUIRESINGLEIMAGETIMEOUT_MS = 12000U;
     OpenCVFITS fits;
 
     static void frameReceviedFunction(
         cv::Mat frame,
         uint64_t cameraTimestamp,
         uint64_t cameraFrameId,
-        void* arg)
+        void *arg)
     {
         // Get current time with milliseconds
         auto now = std::chrono::system_clock::now();
-        AlviumSyncCapture* self = (AlviumSyncCapture*)arg;
+        AlviumSyncCapture *self = (AlviumSyncCapture *)arg;
         self->receivedFramesCount++;
 
         if (self->isSavingEnable)
@@ -311,12 +422,11 @@ private:
     bool createNewSaveDirectory(std::string directoryName)
     {
         /* We need to create a new directory for the file
-        * save location. Then if we are saving average frames
-        * we save the frame
-        */
+         * save location. Then if we are saving average frames
+         * we save the frame
+         */
 
         std::string directorypath = this->currentSavePath + directoryName;
-
 
         /* Create the images and detections subfolders */
         if (true == std::filesystem::exists(directorypath))
@@ -332,12 +442,30 @@ private:
         return true;
     }
 
+    static uint64_t systemClockToUTC(std::chrono::system_clock::time_point now)
+    {
+        // Convert to time_point in UTC
+        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm *now_tm = std::gmtime(&now_time_t); // Convert to UTC time struct
+
+        // Set the time zone to UTC
+        now_tm->tm_isdst = 0; // Not Daylight Saving Time
+
+        // Convert back to time_point
+        std::chrono::system_clock::time_point utc_time_point = std::chrono::system_clock::from_time_t(std::mktime(now_tm));
+
+        // Convert to microseconds since the Unix epoch
+        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(utc_time_point.time_since_epoch());
+        uint64_t timestamp = microseconds.count();
+
+        return timestamp;
+    }
 };
 
 /*****************************************************************************/
 /* MAIN                                                                      */
 /*****************************************************************************/
-int main(int argc, const char** argv)
+int main(int argc, const char **argv)
 {
     AlviumSyncCapture alviumSyncCapture;
     alviumSyncCapture.run();

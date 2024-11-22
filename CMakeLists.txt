@@ -5,7 +5,7 @@ endif(COMMAND cmake_policy)
 include(CMakePrintHelpers)
 
 project(AlviumSyncCapture LANGUAGES CXX)
-set (CMAKE_CXX_FLAGS "-lgps -lstdc++fs -std=c++17")
+set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17")
 # Compile a target using NanoGUI
 
 add_executable(AlviumSyncCapture AlviumSyncCapture.cpp)
