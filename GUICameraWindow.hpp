@@ -56,14 +56,16 @@ public:
         this->minPixelValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "average pixel value:", "sans-bold");
         this->averagePixelValue = new nanogui::IntBox<int>(this, 0);
+        new nanogui::Label(this, "STD Pixel Value:", "sans-bold");
+        this->stdPixelValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "Frames Received:", "sans-bold");
         this->framesReceivedValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "Frames Saved:", "sans-bold");
         this->framesSavedValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "Preview Stretch:", "sans-bold");
         previewStretchSlider = new nanogui::Slider(this);
-        previewStretchSlider->setRange(std::pair<float, float>(0, 100));
-        previewStretchSlider->setValue(100);
+        previewStretchSlider->setRange(std::pair<float, float>(0.01, 1));
+        previewStretchSlider->setValue(1);
     };
 
     nanogui::TextBox *pixelFormat = nullptr;
@@ -73,6 +75,7 @@ public:
     nanogui::IntBox<int> *maxPixelValue = nullptr;
     nanogui::IntBox<int> *minPixelValue = nullptr;
     nanogui::IntBox<int> *averagePixelValue = nullptr;
+    nanogui::IntBox<int> *stdPixelValue = nullptr;
     nanogui::IntBox<int> *framesReceivedValue = nullptr;
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;

@@ -14,6 +14,7 @@
 #include "GUIScreen.hpp"
 #include "GNSS.hpp"
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
+#include "ImagePreviewWindow.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 #include <opencv2/opencv.hpp>
 
@@ -304,6 +305,62 @@ public:
                 return true;
             });
 
+        std::thread imagePreviewThread(
+            [this]
+            {
+                ImagePreviewWindow imagePreview("Image Preview");
+                ImagePreviewWindow histogram("Histogram");
+
+                while (!exitDisplayThreadFlag)
+                {
+                    cv::Mat frame;
+                    this->lastRecievedImageMutex.lock();
+                    frame = this->lastRecievedImage.clone();
+                    this->lastRecievedImageMutex.unlock();
+                    if (false == frame.empty())
+                    {
+                        imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
+
+                        cv::Scalar mean;
+                        cv::Scalar std;
+                        cv::meanStdDev(frame, mean, std);
+
+                        double max;
+                        double min;
+                        cv::minMaxLoc(frame, &min, &max);
+
+                        this->screen.cameraWindow->maxPixelValue->setValue(max);
+                        this->screen.cameraWindow->minPixelValue->setValue(min);
+                        this->screen.cameraWindow->averagePixelValue->setValue(mean[0]);
+                        this->screen.cameraWindow->stdPixelValue->setValue(std[0]);
+                        this->screen.cameraWindow->framesReceivedValue->setValue(receivedFramesCount);
+                        this->screen.cameraWindow->framesSavedValue->setValue(savedFramesCount);
+
+                        int histSize = 256;
+                        float range[] = {0, (float)max};
+                        const float *histRange = {range};
+                        cv::Mat hist;
+                        cv::calcHist(&frame, 1, {0}, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
+                        normalize(hist, hist, 0, hist.rows, cv::NORM_MINMAX, -1, cv::Mat());
+                        cv::Mat histImage(histSize, histSize, CV_8UC1, cv::Scalar(0, 0, 0));
+                        int bin_w = cvRound((double)histImage.cols / histSize);
+
+                        for (int i = 1; i < histSize; i++)
+                        {
+                            cv::line(
+                                histImage,
+                                cv::Point(
+                                    bin_w * (i - 1),
+                                    histImage.rows - cvRound(hist.at<float>(i - 1))),
+                                cv::Point(bin_w * (i), histImage.rows - cvRound(hist.at<float>(i))),
+                                cv::Scalar(255, 0, 0),
+                                2, 8, 0);
+                        }
+                        histogram.setImage(histImage);
+                    }
+                    usleep(100 * 1000);
+                }
+            });
         /* Create the screen and update the connected camera */
         this->updateCameracapture();
         this->screen.start();
@@ -313,6 +370,10 @@ private:
     GUIScreen screen;
     GNSS gnss;
     AlliedVisionAlvium camera;
+
+    std::mutex lastRecievedImageMutex;
+    cv::Mat lastRecievedImage;
+    std::atomic<bool> exitDisplayThreadFlag = false;
 
     std::atomic<bool> isImageReceptionEnabled = false;
     std::atomic<bool> isSavingEnable = false;
@@ -341,6 +402,10 @@ private:
         auto now = std::chrono::system_clock::now();
         AlviumSyncCapture *self = (AlviumSyncCapture *)arg;
         self->receivedFramesCount++;
+
+        self->lastRecievedImageMutex.lock();
+        self->lastRecievedImage = frame.clone();
+        self->lastRecievedImageMutex.unlock();
 
         if (self->isSavingEnable)
         {
