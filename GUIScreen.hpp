@@ -67,13 +67,13 @@ GUIScreen::GUIScreen()
             0);
 
     cameraWindow =
-        new GUICameraWindow(screen, 400, 500, 0, 250);
+        new GUICameraWindow(screen, 450, 500, 0, 250);
 
     gnssWindow =
-        new GUIGNSSWindow(screen, 300, 500, 0, 650);
+        new GUIGNSSWindow(screen, 300, 500, 0, 700);
     this->capture->setVisible(true);
     this->cameraWindow->setVisible(true);
-    this->gnssWindow->setVisible(true);
+    this->gnssWindow->setVisible(false);
     screen->setVisible(true);
     screen->performLayout();
 }

@@ -35,7 +35,7 @@ public:
         this->setLayout(GNSSLayout);
 
         this->PPSLabel =
-            new nanogui::Label(this, "PPS (This should be flashing):", "sans-bold");
+            new nanogui::Label(this, "PPS", "sans-bold");
         this->PPSButton = new nanogui::Button(
             this,
             "");

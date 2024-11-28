@@ -46,7 +46,7 @@ public:
                 {
                     /* We are not currently capturing... Lets start capturing*/
                     /* update the currently captureured camera values */
-                    this->updateCameracapture();
+                    this->updateCameraCapture();
 
                     /* start the camera acquisition */
                     if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncCapture::frameReceviedFunction, this))
@@ -76,7 +76,7 @@ public:
                     }
 
                     /* update the currently captureured camera values */
-                    this->updateCameracapture();
+                    this->updateCameraCapture();
                 }
             });
 
@@ -84,6 +84,7 @@ public:
         this->screen.capture->acquireSingleButton->setCallback(
             [this]
             {
+                std::cout << "Acuqiring single image" << std::endl;
                 if (false == this->isImageReceptionEnabled)
                 {
                     cv::Mat image;
@@ -91,7 +92,8 @@ public:
                     uint64_t cameraFrameId;
                     /* We are not currently capturing... Lets start capturing*/
                     /* update the currently captureured camera values */
-                    this->updateCameracapture();
+                    this->updateCameraCapture();
+                    std::cout << "Camera Capture updated" << std::endl;
 
                     this->screen.capture->acquireSingleButton->setCaption("Getting Image...");
                     this->screen.capture->acquireSingleButton->setBackgroundColor(
@@ -99,6 +101,8 @@ public:
                     /* start the camera acquisition */
                     if (true == this->camera.getSingleFrame(image, cameraFrameId, cameraTimestamp, ACQUIRESINGLEIMAGETIMEOUT_MS))
                     {
+                        std::cout << "Got Image" << std::endl;
+
                         // Get current time with milliseconds
                         auto now = std::chrono::system_clock::now();
                         // Convert to time_since_epoch in microseconds
@@ -107,7 +111,9 @@ public:
                         uint64_t timestamp = systemClockToUTC(now);
 
                         this->receivedFramesCount++;
-
+                        this->lastRecievedImageMutex.lock();
+                        this->lastRecievedImage = image.clone();
+                        this->lastRecievedImageMutex.unlock();
                         if (this->isSavingEnable)
                         {
                             std::string directory;
@@ -169,6 +175,10 @@ public:
                                 this->savedFramesCount++;
                             }
                         }
+                        else
+                        {
+                            std::cout << "Saving not enabled." << std::endl;
+                        }
                     }
                     else
                     {
@@ -178,6 +188,10 @@ public:
                     this->screen.capture->acquireSingleButton->setCaption("Acquire single image");
                     this->screen.capture->acquireSingleButton->setBackgroundColor(
                         this->screen.capture->GREEN);
+                }
+                else
+                {
+                    std::cerr << "Image reception is already enabled... " << std::endl;
                 }
             });
 
@@ -189,7 +203,8 @@ public:
                 {
                     if (screen.capture->imageSaveLocation->value() == "")
                     {
-                        std::cerr << "No save location selected... please select one in the captureuration menu..." << std::endl;
+                        std::cerr
+                            << "No save location selected... please select one in the capture window..." << std::endl;
                     }
                     else
                     {
@@ -240,6 +255,88 @@ public:
                 }
             });
 
+        /* Set what happens when the recording button is pushed */
+        screen.cameraWindow->gnssButton->setCallback(
+            [this]
+            {
+                if (false == this->isGNSSTriggeringEnabled)
+                {
+                    /* Disable image reception if it is going */
+                    if (true == this->isImageReceptionEnabled)
+                    {
+                        this->screen.capture->acquireButton->callback();
+                    }
+
+                    /* Configure the camera for external triggering */
+
+                    if (false == this->camera.setFeature("LineSelector", "Line0"))
+                    {
+                        std::cerr << "Could not set LineSelector" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("LineMode", "Input"))
+                    {
+                        std::cerr << "Could not set LineMode" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("LineDebounceMode", "Off"))
+                    {
+                        std::cerr << "Could not set LineDebounceMode" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("TriggerSource", "Line0"))
+                    {
+                        std::cerr << "Could not set TriggerSource" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("TriggerActivation", "RisingEdge"))
+                    {
+                        std::cerr << "Could not set TriggerActivation" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("TriggerDelay", "0"))
+                    {
+                        std::cerr << "Could not set TriggerDelay" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("TriggerSelector", "FrameStart"))
+                    {
+                        std::cerr << "Could not set TriggerSelector" << std::endl;
+                        return;
+                    }
+                    else if (false == this->camera.setFeature("TriggerMode", "On"))
+                    {
+                        std::cerr << "Could not set TriggerMode" << std::endl;
+                        return;
+                    }
+                    /* If we are here the camera is configured.*/
+
+                    this->isGNSSTriggeringEnabled = true;
+                    screen.cameraWindow->gnssButton->setCaption("Disable Triggering");
+                    screen.cameraWindow->gnssButton->setBackgroundColor(
+                        screen.cameraWindow->RED);
+                    screen.cameraWindow->syncLabel->setVisible(true);
+                    screen.cameraWindow->syncButton->setVisible(true);
+                    this->screen.gnssWindow->setVisible(true);
+
+                    this->screen.screen->performLayout();
+                    std::cout << "GNSS Triggering enabled... " << std::endl;
+                }
+                else
+                {
+                    this->isGNSSTriggeringEnabled = false;
+
+                    screen.cameraWindow->gnssButton->setCaption("Enable Triggering");
+                    screen.cameraWindow->gnssButton->setBackgroundColor(
+                        screen.cameraWindow->GREEN);
+                    screen.cameraWindow->syncLabel->setVisible(false);
+                    screen.cameraWindow->syncButton->setVisible(false);
+                    this->screen.gnssWindow->setVisible(false);
+                    this->screen.screen->performLayout();
+                    std::cout << "GNSS Triggering Disabled... " << std::endl;
+                }
+            });
+
         /* Set what happens when the pixel format is edited */
         screen.cameraWindow->pixelFormat->setCallback(
             [this](std::string value)
@@ -253,7 +350,7 @@ public:
                     std::cout << "Set PixelFormat to " << value << std::endl;
                 }
 
-                this->updateCameracapture();
+                this->updateCameraCapture();
                 return true;
             });
         /* Set what happens when Gain is edited */
@@ -269,7 +366,7 @@ public:
                     std::cout << "Set gain to " << value << std::endl;
                 }
 
-                this->updateCameracapture();
+                this->updateCameraCapture();
             });
 
         /* Set what happens when exposure is edited */
@@ -285,7 +382,7 @@ public:
                     std::cout << "Set exposure to " << value << std::endl;
                 }
 
-                this->updateCameracapture();
+                this->updateCameraCapture();
             });
 
         /* Set what happens when exposure is edited */
@@ -301,7 +398,7 @@ public:
                     std::cout << "Set PixelFormat to " << value << std::endl;
                 }
 
-                this->updateCameracapture();
+                this->updateCameraCapture();
                 return true;
             });
 
@@ -309,7 +406,7 @@ public:
             [this]
             {
                 ImagePreviewWindow imagePreview("Image Preview");
-                ImagePreviewWindow histogram("Histogram");
+                imagePreview.setSize(800, 600);
 
                 while (!exitDisplayThreadFlag)
                 {
@@ -335,34 +432,12 @@ public:
                         this->screen.cameraWindow->stdPixelValue->setValue(std[0]);
                         this->screen.cameraWindow->framesReceivedValue->setValue(receivedFramesCount);
                         this->screen.cameraWindow->framesSavedValue->setValue(savedFramesCount);
-
-                        int histSize = 256;
-                        float range[] = {0, (float)max};
-                        const float *histRange = {range};
-                        cv::Mat hist;
-                        cv::calcHist(&frame, 1, {0}, cv::Mat(), hist, 1, &histSize, &histRange, true, false);
-                        normalize(hist, hist, 0, hist.rows, cv::NORM_MINMAX, -1, cv::Mat());
-                        cv::Mat histImage(histSize, histSize, CV_8UC1, cv::Scalar(0, 0, 0));
-                        int bin_w = cvRound((double)histImage.cols / histSize);
-
-                        for (int i = 1; i < histSize; i++)
-                        {
-                            cv::line(
-                                histImage,
-                                cv::Point(
-                                    bin_w * (i - 1),
-                                    histImage.rows - cvRound(hist.at<float>(i - 1))),
-                                cv::Point(bin_w * (i), histImage.rows - cvRound(hist.at<float>(i))),
-                                cv::Scalar(255, 0, 0),
-                                2, 8, 0);
-                        }
-                        histogram.setImage(histImage);
                     }
-                    usleep(100 * 1000);
+                    usleep(33000);
                 }
             });
         /* Create the screen and update the connected camera */
-        this->updateCameracapture();
+        this->updateCameraCapture();
         this->screen.start();
     }
 
@@ -377,7 +452,9 @@ private:
 
     std::atomic<bool> isImageReceptionEnabled = false;
     std::atomic<bool> isSavingEnable = false;
-    std::atomic<uint64_t> receivedFramesCount = 0;
+    std::atomic<bool> isGNSSTriggeringEnabled = false;
+    std::atomic<uint64_t>
+        receivedFramesCount = 0;
     std::atomic<uint64_t> savedFramesCount = 0;
     std::string currentSavePath;
 
@@ -453,7 +530,7 @@ private:
         }
     }
 
-    void updateCameracapture(void)
+    void updateCameraCapture(void)
     {
         std::string value;
         if (false == this->camera.getFeature("ExposureTime", value))
