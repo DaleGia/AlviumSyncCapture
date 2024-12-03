@@ -44,39 +44,11 @@ public:
             {
                 if (false == isImageReceptionEnabled)
                 {
-                    /* We are not currently capturing... Lets start capturing*/
-                    /* update the currently captureured camera values */
-                    this->updateCameraCapture();
-
-                    /* start the camera acquisition */
-                    if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncCapture::frameReceviedFunction, this))
-                    {
-                        this->isImageReceptionEnabled = true;
-                        this->screen.capture->acquireButton->setCaption("Stop image acquisition");
-                        this->screen.capture->acquireButton->setBackgroundColor(
-                            this->screen.capture->RED);
-                        std::cout << "Started image acquisition... " << std::endl;
-                    }
-                    else
-                    {
-                        std::cerr << "Unable to start image acquisition... " << std::endl;
-                    }
+                    this->startImageAcquisition();
                 }
                 else
                 {
-                    /* We are currently capturing... Lets stop capturing*/
-                    /* Stop the camera acquisition */
-                    if (true == camera.stopAcquisition())
-                    {
-                        this->isImageReceptionEnabled = false;
-                        this->screen.capture->acquireButton->setCaption("Start image acquisition");
-                        this->screen.capture->acquireButton->setBackgroundColor(
-                            this->screen.capture->GREEN);
-                        std::cout << "Stopped image acquisition... " << std::endl;
-                    }
-
-                    /* update the currently captureured camera values */
-                    this->updateCameraCapture();
+                    this->stopImageAcquisition();
                 }
             });
 
@@ -261,79 +233,11 @@ public:
             {
                 if (false == this->isGNSSTriggeringEnabled)
                 {
-                    /* Disable image reception if it is going */
-                    if (true == this->isImageReceptionEnabled)
-                    {
-                        this->screen.capture->acquireButton->callback();
-                    }
-
-                    /* Configure the camera for external triggering */
-
-                    if (false == this->camera.setFeature("LineSelector", "Line0"))
-                    {
-                        std::cerr << "Could not set LineSelector" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("LineMode", "Input"))
-                    {
-                        std::cerr << "Could not set LineMode" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("LineDebounceMode", "Off"))
-                    {
-                        std::cerr << "Could not set LineDebounceMode" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("TriggerSource", "Line0"))
-                    {
-                        std::cerr << "Could not set TriggerSource" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("TriggerActivation", "RisingEdge"))
-                    {
-                        std::cerr << "Could not set TriggerActivation" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("TriggerDelay", "0"))
-                    {
-                        std::cerr << "Could not set TriggerDelay" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("TriggerSelector", "FrameStart"))
-                    {
-                        std::cerr << "Could not set TriggerSelector" << std::endl;
-                        return;
-                    }
-                    else if (false == this->camera.setFeature("TriggerMode", "On"))
-                    {
-                        std::cerr << "Could not set TriggerMode" << std::endl;
-                        return;
-                    }
-                    /* If we are here the camera is configured.*/
-
-                    this->isGNSSTriggeringEnabled = true;
-                    screen.cameraWindow->gnssButton->setCaption("Disable Triggering");
-                    screen.cameraWindow->gnssButton->setBackgroundColor(
-                        screen.cameraWindow->RED);
-                    screen.cameraWindow->syncLabel->setVisible(true);
-                    screen.cameraWindow->syncButton->setVisible(true);
-                    this->screen.gnssWindow->setVisible(true);
-
-                    this->screen.screen->performLayout();
-                    std::cout << "GNSS Triggering enabled... " << std::endl;
+                    this->enableExternalTriggering();
                 }
                 else
                 {
-                    this->isGNSSTriggeringEnabled = false;
-
-                    screen.cameraWindow->gnssButton->setCaption("Enable Triggering");
-                    screen.cameraWindow->gnssButton->setBackgroundColor(
-                        screen.cameraWindow->GREEN);
-                    screen.cameraWindow->syncLabel->setVisible(false);
-                    screen.cameraWindow->syncButton->setVisible(false);
-                    this->screen.gnssWindow->setVisible(false);
-                    this->screen.screen->performLayout();
-                    std::cout << "GNSS Triggering Disabled... " << std::endl;
+                    this->disableExternalTriggering();
                 }
             });
 
@@ -417,19 +321,6 @@ public:
                     if (false == frame.empty())
                     {
                         imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
-
-                        cv::Scalar mean;
-                        cv::Scalar std;
-                        cv::meanStdDev(frame, mean, std);
-
-                        double max;
-                        double min;
-                        cv::minMaxLoc(frame, &min, &max);
-
-                        this->screen.cameraWindow->maxPixelValue->setValue(max);
-                        this->screen.cameraWindow->minPixelValue->setValue(min);
-                        this->screen.cameraWindow->averagePixelValue->setValue(mean[0]);
-                        this->screen.cameraWindow->stdPixelValue->setValue(std[0]);
                         this->screen.cameraWindow->framesReceivedValue->setValue(receivedFramesCount);
                         this->screen.cameraWindow->framesSavedValue->setValue(savedFramesCount);
                     }
@@ -437,6 +328,7 @@ public:
                 }
             });
         /* Create the screen and update the connected camera */
+        this->disableExternalTriggering();
         this->updateCameraCapture();
         this->screen.start();
     }
@@ -559,6 +451,152 @@ private:
         {
             this->screen.cameraWindow->pixelFormat->setValue(value);
         }
+    }
+
+    bool startImageAcquisition(void)
+    {
+        /* We are not currently capturing... Lets start capturing*/
+        /* update the currently captureured camera values */
+        this->updateCameraCapture();
+
+        /* start the camera acquisition */
+        if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncCapture::frameReceviedFunction, this))
+        {
+            this->isImageReceptionEnabled = true;
+            this->screen.capture->acquireButton->setCaption("Stop image acquisition");
+            this->screen.capture->acquireButton->setBackgroundColor(
+                this->screen.capture->RED);
+            std::cout << "Started image acquisition... " << std::endl;
+        }
+        else
+        {
+            std::cerr << "Unable to start image acquisition... " << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+    bool stopImageAcquisition(void)
+    {
+        /* We are currently capturing... Lets stop capturing*/
+        /* Stop the camera acquisition */
+        if (true == camera.stopAcquisition())
+        {
+            this->isImageReceptionEnabled = false;
+            this->screen.capture->acquireButton->setCaption("Start image acquisition");
+            this->screen.capture->acquireButton->setBackgroundColor(
+                this->screen.capture->GREEN);
+            std::cout << "Stopped image acquisition... " << std::endl;
+        }
+        else
+        {
+            return false;
+        }
+        /* update the currently captureured camera values */
+        this->updateCameraCapture();
+        return true;
+    }
+
+    bool enableExternalTriggering(void)
+    {
+        if (false == this->isGNSSTriggeringEnabled)
+        {
+            /* Disable image reception if it is going */
+            if (true == this->isImageReceptionEnabled)
+            {
+                this->stopImageAcquisition();
+            }
+
+            /* Configure the camera for external triggering */
+
+            if (false == this->camera.setFeature("LineSelector", "Line0"))
+            {
+                std::cerr << "Could not set LineSelector" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("LineMode", "Input"))
+            {
+                std::cerr << "Could not set LineMode" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("LineDebounceMode", "Off"))
+            {
+                std::cerr << "Could not set LineDebounceMode" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("TriggerSource", "Line0"))
+            {
+                std::cerr << "Could not set TriggerSource" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("TriggerActivation", "RisingEdge"))
+            {
+                std::cerr << "Could not set TriggerActivation" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("TriggerDelay", "0"))
+            {
+                std::cerr << "Could not set TriggerDelay" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("TriggerSelector", "FrameStart"))
+            {
+                std::cerr << "Could not set TriggerSelector" << std::endl;
+                return false;
+            }
+            else if (false == this->camera.setFeature("TriggerMode", "On"))
+            {
+                std::cerr << "Could not set TriggerMode" << std::endl;
+                return false;
+            }
+            /* If we are here the camera is configured.*/
+
+            this->isGNSSTriggeringEnabled = true;
+            screen.cameraWindow->gnssButton->setCaption("Disable Triggering");
+            screen.cameraWindow->gnssButton->setBackgroundColor(
+                screen.cameraWindow->RED);
+            screen.cameraWindow->syncLabel->setVisible(true);
+            screen.cameraWindow->syncButton->setVisible(true);
+            this->screen.gnssWindow->setVisible(true);
+
+            this->screen.screen->performLayout();
+            std::cout << "Triggering enabled... " << std::endl;
+        }
+
+        return true;
+    }
+
+    bool disableExternalTriggering(void)
+    {
+        if (true == this->isGNSSTriggeringEnabled)
+        {
+            /* Disable image reception if it is going */
+            if (true == this->isImageReceptionEnabled)
+            {
+                this->stopImageAcquisition();
+            }
+
+            /* Configure the camera for external triggering */
+
+            if (false == this->camera.setFeature("TriggerMode", "Off"))
+            {
+                std::cerr << "Could not set TriggerMode" << std::endl;
+                return false;
+            }
+            /* If we are here the camera is configured.*/
+        }
+        this->isGNSSTriggeringEnabled = false;
+
+        screen.cameraWindow->gnssButton->setCaption("Enable Triggering");
+        screen.cameraWindow->gnssButton->setBackgroundColor(
+            screen.cameraWindow->GREEN);
+        screen.cameraWindow->syncLabel->setVisible(false);
+        screen.cameraWindow->syncButton->setVisible(false);
+        this->screen.gnssWindow->setVisible(false);
+        this->screen.screen->performLayout();
+        std::cout << "Triggering Disabled... " << std::endl;
+
+        return true;
     }
 
     bool createNewSaveDirectory(std::string directoryName)
