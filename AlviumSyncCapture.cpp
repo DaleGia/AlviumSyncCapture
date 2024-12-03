@@ -5,9 +5,9 @@
  * @brief
  * TODO add me
  */
-/*****************************************************************************/
-/*INLCUDES                                                                   */
-/*****************************************************************************/
+ /*****************************************************************************/
+ /*INLCUDES                                                                   */
+ /*****************************************************************************/
 #include "unistd.h"
 #include <iostream>
 
@@ -90,7 +90,7 @@ public:
                         {
                             std::string directory;
                             directory = screen.capture->imageSaveLocation->value();
-                            this->currentSavePath = directory;
+                            this->currentRootSavePath = directory;
 
                             auto milliseconds =
                                 std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -99,7 +99,7 @@ public:
                             // Format date and time string (YYYYMMDD_HHMMSS_mmm)
                             std::stringstream filename_stream;
                             filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
-                                            << std::setfill('0') << std::setw(3) << milliseconds.count();
+                                << std::setfill('0') << std::setw(3) << milliseconds.count();
                             if (false == this->createNewSaveDirectory(filename_stream.str()))
                             {
                                 return;
@@ -150,6 +150,9 @@ public:
                         else
                         {
                             std::cout << "Saving not enabled." << std::endl;
+                            this->lastRecievedImageMutex.lock();
+                            this->lastRecievedImage = image.clone();
+                            this->lastRecievedImageMutex.unlock();
                         }
                     }
                     else
@@ -183,7 +186,7 @@ public:
                         /* Get the current save location */
                         std::string directory;
                         directory = screen.capture->imageSaveLocation->value();
-                        this->currentSavePath = directory;
+                        this->currentRootSavePath = directory;
 
                         // Get current time with milliseconds
                         auto now = std::chrono::system_clock::now();
@@ -194,7 +197,7 @@ public:
                         // Format date and time string (YYYYMMDD_HHMMSS_mmm)
                         std::stringstream filename_stream;
                         filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
-                                        << std::setfill('0') << std::setw(3) << milliseconds.count();
+                            << std::setfill('0') << std::setw(3) << milliseconds.count();
                         if (false == this->createNewSaveDirectory(filename_stream.str()))
                         {
                             return;
@@ -348,6 +351,7 @@ private:
     std::atomic<uint64_t>
         receivedFramesCount = 0;
     std::atomic<uint64_t> savedFramesCount = 0;
+    std::string currentRootSavePath;
     std::string currentSavePath;
 
     std::atomic<double> currentExposureUs = 0;
@@ -365,11 +369,11 @@ private:
         cv::Mat frame,
         uint64_t cameraTimestamp,
         uint64_t cameraFrameId,
-        void *arg)
+        void* arg)
     {
         // Get current time with milliseconds
         auto now = std::chrono::system_clock::now();
-        AlviumSyncCapture *self = (AlviumSyncCapture *)arg;
+        AlviumSyncCapture* self = (AlviumSyncCapture*)arg;
         self->receivedFramesCount++;
 
         self->lastRecievedImageMutex.lock();
@@ -606,18 +610,21 @@ private:
          * we save the frame
          */
 
-        std::string directorypath = this->currentSavePath + directoryName;
+        std::string directorypath = this->currentRootSavePath + "/" + directoryName;
 
         /* Create the images and detections subfolders */
         if (true == std::filesystem::exists(directorypath))
         {
             // Directory already exists...
+            std::cerr << "Directory already exists: " << directorypath << std::endl;
         }
         else if (false == std::filesystem::create_directories(directorypath))
         {
             std::cerr << "Could not create directory" << directorypath << std::endl;
             return false;
         }
+
+        this->currentSavePath = directorypath;
 
         return true;
     }
@@ -626,7 +633,7 @@ private:
     {
         // Convert to time_point in UTC
         std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm *now_tm = std::gmtime(&now_time_t); // Convert to UTC time struct
+        std::tm* now_tm = std::gmtime(&now_time_t); // Convert to UTC time struct
 
         // Set the time zone to UTC
         now_tm->tm_isdst = 0; // Not Daylight Saving Time
@@ -645,7 +652,7 @@ private:
 /*****************************************************************************/
 /* MAIN                                                                      */
 /*****************************************************************************/
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
     AlviumSyncCapture alviumSyncCapture;
     alviumSyncCapture.run();
