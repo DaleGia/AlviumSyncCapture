@@ -51,20 +51,22 @@ public:
         previewStretchSlider = new nanogui::Slider(this);
         previewStretchSlider->setRange(std::pair<float, float>(0.01, 1));
         previewStretchSlider->setValue(1);
-        new nanogui::Label(this, "GNSS Triggering:", "sans-bold");
-        this->gnssButton = new nanogui::Button(
+        new nanogui::Label(this, "External Triggering:", "sans-bold");
+        this->externalButton = new nanogui::Button(
             this,
-            "Enable Triggering");
-        this->gnssButton->setBackgroundColor(
+            "Enable External Triggering");
+        this->externalButton->setBackgroundColor(
             GREEN);
-        this->syncLabel = new nanogui::Label(this, "Camera PPS", "sans-bold");
-        this->syncButton = new nanogui::Button(
-            this,
-            "");
-        this->syncButton->setBackgroundColor(
-            RED);
-        this->syncLabel->setVisible(false);
-        this->syncButton->setVisible(false);
+        new nanogui::Label(this, "Camera PPS (Since Camera Power On)", "sans-bold");
+        this->CameraPPS = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS (Local)", "sans-bold");
+        this->CameraSystemLocalPPS = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS (UTC)", "sans-bold");
+        this->CameraSystemUTCPPS = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS Jitter (ns)", "sans-bold");
+        this->CameraPPSJitter = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "System PPS Jitter (us)", "sans-bold");
+        this->CameraSystemPPSJitter = new nanogui::TextBox(this, "");
     };
 
     nanogui::TextBox *pixelFormat = nullptr;
@@ -74,9 +76,13 @@ public:
     nanogui::IntBox<int> *framesReceivedValue = nullptr;
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;
-    nanogui::Button *syncButton;
-    nanogui::Button *gnssButton;
-    nanogui::Label *syncLabel = nullptr;
+    nanogui::TextBox *CameraPPS;
+    nanogui::TextBox *CameraSystemLocalPPS;
+    nanogui::TextBox *CameraSystemUTCPPS;
+    nanogui::TextBox *CameraPPSJitter;
+    nanogui::TextBox *CameraSystemPPSJitter;
+
+    nanogui::Button *externalButton;
 
     const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
     const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);

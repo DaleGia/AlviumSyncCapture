@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6...3.28.1)
+cmake_minimum_required(VERSION 3.13)
 if(COMMAND cmake_policy)
       cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
@@ -7,8 +7,13 @@ include(CMakePrintHelpers)
 project(AlviumSyncCapture LANGUAGES CXX)
 set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17")
 # Compile a target using NanoGUI
+add_executable(AlviumSyncCapture main.cpp)
 
-add_executable(AlviumSyncCapture AlviumSyncCapture.cpp)
+# add(SOURCES submodule/b.c)
+target_sources(${PROJECT_NAME} PRIVATE "AlviumSyncCapture.cpp")
+target_sources(${PROJECT_NAME} PRIVATE "GUIScreen.cpp")
+target_sources(${PROJECT_NAME} PRIVATE "GNSS.cpp")
+target_sources(${PROJECT_NAME} PRIVATE "AlliedVisionAlvium/AlliedVisionAlvium.cpp")
 
 #########################ALLIED VISION VIMBAX STUFF ####################
 # add hardcoded guesses for the location of Vmb to CMAKE_PREFIX_PATH
@@ -46,7 +51,7 @@ include_directories(nanogui/include)
 # against NanoGUI, we need to link against those as well.
 target_link_libraries(AlviumSyncCapture nanogui ${NANOGUI_EXTRA_LIBS})
 
-file(GLOB_RECURSE SRC_DIR "nanogui/*.c" "nanogui/*.h")
+# file(GLOB_RECURSE SRC_DIR "nanogui/*.c" "nanogui/*.h")
 
 ############## OpenCV STUFF ########################################
 find_package(OpenCV REQUIRED )
