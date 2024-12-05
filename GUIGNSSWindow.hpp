@@ -36,17 +36,33 @@ public:
         GNSSLayout->setSpacing(0, 0);
         this->setLayout(GNSSLayout);
 
-        new nanogui::Label(this, "Time (UTC):", "sans-bold");
+        new nanogui::Label(this, "GNSS Time (UTC):", "sans-bold");
         this->TimeUTCBox = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS (UTC)", "sans-bold");
+        this->CameraSystemUTCPPS = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS (Local)", "sans-bold");
+        this->CameraSystemLocalPPS = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Camera PPS Jitter (us)", "sans-bold");
+        this->CameraPPSJitter = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "System PPS Jitter (us)", "sans-bold");
+        this->CameraSystemPPSJitter = new nanogui::TextBox(this, "");
         new nanogui::Label(this, "Location (WGS84):", "sans-bold");
         this->LocationBox = new nanogui::TextBox(this, "");
         new nanogui::Label(this, "Altitude MSL:", "sans-bold");
         this->altitudeMSLBox = new nanogui::TextBox(this, "");
+        new nanogui::Label(this, "Trigger Frequency:", "sans-bold");
+        this->triggerFrequencyBox = new nanogui::IntBox<uint32_t>(this, 0);
+        this->triggerFrequencyBox->setEditable(true);
     };
 
     nanogui::TextBox *TimeUTCBox = nullptr;
+    nanogui::TextBox *CameraSystemLocalPPS;
+    nanogui::TextBox *CameraSystemUTCPPS;
+    nanogui::TextBox *CameraPPSJitter;
+    nanogui::TextBox *CameraSystemPPSJitter;
     nanogui::TextBox *LocationBox = nullptr;
     nanogui::TextBox *altitudeMSLBox = nullptr;
+    nanogui::IntBox<uint32_t> *triggerFrequencyBox = nullptr;
 
     const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
     const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);

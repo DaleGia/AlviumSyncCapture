@@ -58,9 +58,16 @@ private:
 
     std::atomic<double> currentExposureUs = 0;
     std::atomic<double> currentGainDb = 0;
-
+    std::atomic<int64_t> triggerFrequency = 0;
     std::atomic<int64_t> lastSystemTimeAtCameraPPS = 0;
+    std::atomic<int64_t> lastSystemTimeJitter = 0;
     std::atomic<int64_t> lastCameraPPSTimestamp = 0;
+    std::atomic<int64_t> lastCameraTimeJitter = 0;
+    std::atomic<int64_t> lastGNSSTime = 0;
+
+    std::atomic<double> lastLatitude = 0;
+    std::atomic<double> lastLongitude = 0;
+    std::atomic<double> lastAltitudeMSL = 0;
 
     static const uint32_t IMAGEBUFFERSIZE = 10;
     /* 12 seconds is 10 second exposure max plus 2*/
@@ -82,6 +89,14 @@ private:
      *
      */
     bool stopImageAcquisition(void);
+
+    /**
+     * @brief Create a New F I T S object
+     *
+     * @return true
+     * @return false
+     */
+    bool createNewFITS(void);
 
     /**
      * @brief
@@ -133,6 +148,24 @@ private:
     /**
      * @brief
      *
+     * @param frequency
+     * @return true
+     * @return false
+     */
+    bool setGNSSTriggerFrequency(int32_t frequency);
+
+    /**
+     * @brief
+     *
+     * @param frequency
+     * @return true
+     * @return false
+     */
+    bool getGNSSTriggerFrequency(int32_t &frequency);
+
+    /**
+     * @brief
+     *
      * @param now
      * @return uint64_t
      */
@@ -142,12 +175,16 @@ private:
      * @brief
      *
      * @param frame
+     * @param systemTimestampSeconds
+     * @param systemTimestampNanpseconds
      * @param cameraTimestamp
      * @param cameraFrameId
      * @param arg
      */
     static void frameReceviedFunction(
         cv::Mat frame,
+        time_t systemTimestampSeconds,
+        time_t systemTimestampNanpseconds,
         uint64_t cameraTimestamp,
         uint64_t cameraFrameId,
         void *arg);

@@ -32,7 +32,7 @@ GUIScreen::GUIScreen()
         new nanogui::Screen(
             Eigen::Vector2i(
                 600,
-                825),
+                850),
             "AlviumSyncCapture");
 
     capture =
@@ -44,10 +44,10 @@ GUIScreen::GUIScreen()
             0);
 
     cameraWindow =
-        new GUICameraWindow(screen, 425, 600, 0, 250);
+        new GUICameraWindow(screen, 300, 600, 0, 250);
 
     gnssWindow =
-        new GUIGNSSWindow(screen, 150, 600, 0, 675);
+        new GUIGNSSWindow(screen, 300, 600, 0, 550);
     this->capture->setVisible(true);
     this->cameraWindow->setVisible(true);
     this->gnssWindow->setVisible(true);

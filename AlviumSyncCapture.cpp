@@ -10,6 +10,7 @@
 /*****************************************************************************/
 #include "AlviumSyncCapture.hpp"
 #include "unistd.h"
+#include <cstdlib>
 
 /*****************************************************************************/
 /* Class                                                                      */
@@ -37,6 +38,11 @@ void AlviumSyncCapture::run(void)
             this->screen.gnssWindow->altitudeMSLBox->setValue(std::to_string(altitude));
             double timeTotal = timeSeconds + timeNanoseconds;
 
+            this->lastGNSSTime = timeTotal;
+            this->lastLatitude = latitude;
+            this->lastLongitude = longitude;
+            this->lastAltitudeMSL = altitude;
+
             // Convert to a time_t object
             time_t gnss_unix_timestamp = timeTotal;
             tm *tm_obj = gmtime(&gnss_unix_timestamp);
@@ -45,6 +51,18 @@ void AlviumSyncCapture::run(void)
             ss << std::put_time(tm_obj, "%Y-%m-%d %H:%M:%S");
             this->screen.gnssWindow->TimeUTCBox->setValue(ss.str());
         });
+
+    int frequency;
+    if (true == getGNSSTriggerFrequency(frequency))
+    {
+        this->triggerFrequency = frequency;
+        this->screen.gnssWindow->triggerFrequencyBox->setValue(frequency);
+    }
+    else
+    {
+        this->screen.gnssWindow->triggerFrequencyBox->setValue(-1);
+    }
+
     /* Try to connect to a camera. Fail if you cannot */
     if (false == camera.connect())
     {
@@ -71,6 +89,11 @@ void AlviumSyncCapture::run(void)
         {
             if (false == isImageReceptionEnabled)
             {
+                if (true == this->isSavingEnable)
+                {
+                    this->createNewFITS();
+                }
+
                 this->startImageAcquisition();
             }
             else
@@ -125,10 +148,6 @@ void AlviumSyncCapture::run(void)
                         std::stringstream filename_stream;
                         filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
                                         << std::setfill('0') << std::setw(3) << milliseconds.count();
-                        if (false == this->createNewSaveDirectory(filename_stream.str()))
-                        {
-                            return;
-                        }
 
                         OpenCVFITS singleFits;
                         if (false == singleFits.createFITS(this->currentSavePath + "/" + filename_stream.str() + ".fit"))
@@ -151,7 +170,7 @@ void AlviumSyncCapture::run(void)
                         {
                             std::cerr << "Could not add FrameID to fits file " << std::endl;
                         }
-                        else if (false == singleFits.addKey2FITS("cameraImageTimestamp", cameraTimestamp))
+                        else if (false == singleFits.addKey2FITS("cameraFrameStartTimestamp", cameraTimestamp))
                         {
                             std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
                         }
@@ -159,13 +178,45 @@ void AlviumSyncCapture::run(void)
                         {
                             std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
                         }
-                        else if (false == singleFits.addKey2FITS("cameraLastPPSTimestamp", this->lastCameraPPSTimestamp))
+                        else if (false == singleFits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", this->lastSystemTimeAtCameraPPS))
                         {
-                            std::cerr << "Could not add cameraLastPPSTimestamp to fits file " << std::endl;
+                            std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
                         }
-                        else if (false == singleFits.addKey2FITS("GNSSLastPPSTimestampUTC", this->lastSystemTimeAtCameraPPS))
+                        else if (false == singleFits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", this->lastSystemTimeJitter))
                         {
-                            std::cerr << "Could not add GNSSLastPPSTimestampUTC to fits file " << std::endl;
+                            std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastCameraPPSTimestamp", this->lastCameraPPSTimestamp))
+                        {
+                            std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", this->lastCameraTimeJitter))
+                        {
+                            std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastGNSSPPSTimestamp", this->lastGNSSTime))
+                        {
+                            std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastLatitude", this->lastLatitude))
+                        {
+                            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastLongitude", this->lastLongitude))
+                        {
+                            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("lastAltitudeMSL", this->lastAltitudeMSL))
+                        {
+                            std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("externalTriggerFrequency", this->triggerFrequency))
+                        {
+                            std::cerr << "Could not add externalTriggerFrequency to fits file " << std::endl;
+                        }
+                        else if (false == singleFits.addKey2FITS("externalTriggerEnabled", (int64_t)this->isGNSSTriggeringEnabled))
+                        {
+                            std::cerr << "Could not add externalTriggerEnabled to fits file " << std::endl;
                         }
                         else if (true == singleFits.closeFITS())
                         {
@@ -201,6 +252,12 @@ void AlviumSyncCapture::run(void)
         {
             if (false == this->isSavingEnable)
             {
+
+                if (true == isImageReceptionEnabled)
+                {
+                    this->createNewFITS();
+                }
+
                 this->startImageSaving();
             }
             else
@@ -288,6 +345,21 @@ void AlviumSyncCapture::run(void)
             return true;
         });
 
+    screen.gnssWindow->triggerFrequencyBox->setCallback(
+        [this](uint32_t value)
+        {
+            int retFrequency;
+            this->setGNSSTriggerFrequency(value);
+
+            if (true == this->getGNSSTriggerFrequency(retFrequency))
+            {
+                this->triggerFrequency = retFrequency;
+                this->screen.gnssWindow->triggerFrequencyBox->setValue(retFrequency);
+            }
+
+            return true;
+        });
+
     std::thread imagePreviewThread(
         [this]
         {
@@ -317,12 +389,13 @@ void AlviumSyncCapture::run(void)
 
 void AlviumSyncCapture::frameReceviedFunction(
     cv::Mat frame,
+    time_t systemTimestampSeconds,
+    time_t systemTimestampNanoseconds,
     uint64_t cameraTimestamp,
     uint64_t cameraFrameId,
     void *arg)
 {
     // Get current time with milliseconds
-    auto now = std::chrono::system_clock::now();
     AlviumSyncCapture *self = (AlviumSyncCapture *)arg;
     self->receivedFramesCount++;
 
@@ -332,10 +405,8 @@ void AlviumSyncCapture::frameReceviedFunction(
 
     if (self->isSavingEnable)
     {
-        // Convert to time_since_epoch in microseconds
-        auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch());
-        // Extract the number of microseconds
-        auto timestamp = microseconds.count();
+        std::tm *tmutc = std::gmtime(&systemTimestampSeconds);
+        time_t systemTimestamp = std::mktime(tmutc) + systemTimestampNanoseconds;
 
         if (false == self->fits.addMat2FITS(frame))
         {
@@ -353,21 +424,53 @@ void AlviumSyncCapture::frameReceviedFunction(
         {
             std::cerr << "Could not add FrameID to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("cameraImageTimestamp", cameraTimestamp))
+        else if (false == self->fits.addKey2FITS("cameraFrameStartTimestamp", cameraTimestamp))
         {
             std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", cameraTimestamp))
+        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", systemTimestamp))
         {
             std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("cameraLastPPSTimestamp", self->lastCameraPPSTimestamp))
+        else if (false == self->fits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", self->lastSystemTimeAtCameraPPS))
         {
-            std::cerr << "Could not add cameraLastPPSTimestamp to fits file " << std::endl;
+            std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("GNSSLastPPSTimestampUTC", self->lastSystemTimeAtCameraPPS))
+        else if (false == self->fits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", self->lastSystemTimeJitter))
         {
-            std::cerr << "Could not add GNSSLastPPSTimestampUTC to fits file " << std::endl;
+            std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastCameraPPSTimestamp", self->lastCameraPPSTimestamp))
+        {
+            std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", self->lastCameraTimeJitter))
+        {
+            std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastGNSSPPSTimestamp", self->lastGNSSTime))
+        {
+            std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastLatitude", self->lastLatitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastLongitude", self->lastLongitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("lastAltitudeMSL", self->lastAltitudeMSL))
+        {
+            std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("externalTriggerFrequency", self->triggerFrequency))
+        {
+            std::cerr << "Could not add externalTriggerFrequency to fits file " << std::endl;
+        }
+        else if (false == self->fits.addKey2FITS("externalTriggerEnabled", (int64_t)self->isGNSSTriggeringEnabled))
+        {
+            std::cerr << "Could not add externalTriggerEnabled to fits file " << std::endl;
         }
         else
         {
@@ -451,6 +554,28 @@ bool AlviumSyncCapture::stopImageAcquisition(void)
     return true;
 }
 
+bool AlviumSyncCapture::createNewFITS(void)
+{
+    // Get current time with milliseconds
+    auto now = std::chrono::system_clock::now();
+    auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+
+    // Format date and time string (YYYYMMDD_HHMMSS_mmm)
+    std::stringstream filename_stream;
+    filename_stream << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S_")
+                    << std::setfill('0') << std::setw(3) << milliseconds.count();
+
+    if (false == this->fits.createFITS(this->currentSavePath + "/" + filename_stream.str() + ".fit"))
+    {
+        std::cerr << "Could not create fits file" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 bool AlviumSyncCapture::startImageSaving(void)
 {
 
@@ -479,12 +604,6 @@ bool AlviumSyncCapture::startImageSaving(void)
                         << std::setfill('0') << std::setw(3) << milliseconds.count();
         if (false == this->createNewSaveDirectory(filename_stream.str()))
         {
-            return false;
-        }
-
-        if (false == this->fits.createFITS(this->currentSavePath + "/" + filename_stream.str() + ".fit"))
-        {
-            std::cerr << "Could not create fits file" << std::endl;
             return false;
         }
 
@@ -575,6 +694,13 @@ bool AlviumSyncCapture::enableExternalTriggering(void)
         std::cout << "Triggering enabled... " << std::endl;
     }
 
+    int frequency;
+    if (true == this->getGNSSTriggerFrequency(frequency))
+    {
+        this->triggerFrequency = frequency;
+        this->screen.gnssWindow->triggerFrequencyBox->setValue(frequency);
+    }
+
     return true;
 }
 
@@ -651,18 +777,16 @@ void AlviumSyncCapture::cameraPPSCallback(
 
     capture->lastCameraPPSTimestamp = value;
     capture->lastSystemTimeAtCameraPPS = systemTimestampSeconds + systemTimestampNanoseconds;
-    /* Update the camera PPS */
-    capture->screen.cameraWindow->CameraPPS->setValue(
-        std::to_string((double)value / (double)1000000000));
 
-    int64_t cameraJitter = value - oldCameraPPS - 1000000000;
+    int64_t cameraJitter = (value - oldCameraPPS - 1000000000) / 1000;
+    capture->lastCameraTimeJitter = cameraJitter;
+
     /* Update the camera PPS jtiter */
-    capture->screen.cameraWindow->CameraPPSJitter->setValue(
+    capture->screen.gnssWindow->CameraPPSJitter->setValue(
         std::to_string(cameraJitter));
 
     time_t seconds = systemTimestampSeconds;
     time_t milliseconds = systemTimestampNanoseconds / 1000000;
-    std::cout << milliseconds << std::endl;
     if (milliseconds > 700)
     {
         seconds += 1;
@@ -673,18 +797,19 @@ void AlviumSyncCapture::cameraPPSCallback(
     std::stringstream ss;
     ss << std::put_time(tm, "%Y/%m/%d %H:%M:%S");
     /* Plot of the gui*/
-    capture->screen.cameraWindow->CameraSystemLocalPPS->setValue(ss.str());
+    capture->screen.gnssWindow->CameraSystemLocalPPS->setValue(ss.str());
 
     /* Convert the time point to UTC time string for display */
     std::tm *tmutc = std::gmtime(&seconds);
     std::stringstream ssutc;
     ssutc << std::put_time(tmutc, "%Y/%m/%d %H:%M:%S");
     /* Plot of the gui*/
-    capture->screen.cameraWindow->CameraSystemUTCPPS->setValue(ssutc.str());
+    capture->screen.gnssWindow->CameraSystemUTCPPS->setValue(ssutc.str());
 
     int64_t systemJitter = (capture->lastSystemTimeAtCameraPPS - oldSystemPPS) / 1000;
+    capture->lastSystemTimeJitter = systemJitter;
     /* Update the camera PPS jtiter */
-    capture->screen.cameraWindow->CameraSystemPPSJitter->setValue(std::to_string(systemJitter));
+    capture->screen.gnssWindow->CameraSystemPPSJitter->setValue(std::to_string(systemJitter));
 }
 
 bool AlviumSyncCapture::createNewSaveDirectory(std::string directoryName)
@@ -726,8 +851,85 @@ uint64_t AlviumSyncCapture::systemClockToUTC(std::chrono::system_clock::time_poi
     std::chrono::system_clock::time_point utc_time_point = std::chrono::system_clock::from_time_t(std::mktime(now_tm));
 
     // Convert to microseconds since the Unix epoch
-    auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(utc_time_point.time_since_epoch());
+    auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch());
     uint64_t timestamp = nanoseconds.count();
 
     return timestamp;
 };
+
+bool AlviumSyncCapture::setGNSSTriggerFrequency(int frequency)
+{
+    std::string command;
+    command = "ubxtool -z CFG-TP-FREQ_LOCK_TP2,";
+    command += std::to_string(frequency);
+    FILE *pipe = popen(command.c_str(), "r");
+
+    if (pipe == nullptr)
+    {
+        std::cerr << "Failed to open pipe" << std::endl;
+        return false;
+    }
+
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+    {
+        // Process the output here, e.g., print it to a file or perform other operations
+        // You can use string manipulation techniques to extract specific information
+    }
+
+    pclose(pipe);
+
+    return true;
+}
+
+bool AlviumSyncCapture::getGNSSTriggerFrequency(int &frequency)
+{
+    FILE *fp = popen("ubxtool -g CFG-TP-FREQ_LOCK_TP2", "r");
+    if (fp == nullptr)
+    {
+        std::cerr << "popen failed\n";
+        return false;
+    }
+
+    char buffer[1024];
+    std::string output;
+    while (fgets(buffer, sizeof(buffer), fp) != nullptr)
+    {
+        output += buffer;
+    }
+
+    pclose(fp);
+
+    // Find the position of the target substring
+    size_t pos = output.find("CFG-TP-FREQ_LOCK_TP2");
+    std::string target_line;
+    // If the substring is found
+    if (pos != std::string::npos)
+    {
+        // Find the beginning of the line (assuming lines are separated by '\n')
+        size_t line_start = output.rfind('\n', pos);
+        // Find the end of the line
+        size_t line_end = output.find('\n', pos);
+
+        // Extract the line
+        target_line = output.substr(line_start + 1, line_end - line_start - 1);
+    }
+    else
+    {
+        std::cout << "CFG-TP-FREQ_LOCK_TP2 not found." << std::endl;
+        return false;
+    }
+
+    // Find the last word (which contains the integer)
+    std::istringstream iss(target_line);
+    std::string word;
+    while (iss >> word)
+    {
+    }
+
+    // Convert the last word to an integer
+    int newValue;
+    std::istringstream(word) >> frequency;
+
+    return true;
+}

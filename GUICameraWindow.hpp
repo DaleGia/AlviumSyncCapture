@@ -57,16 +57,6 @@ public:
             "Enable External Triggering");
         this->externalButton->setBackgroundColor(
             GREEN);
-        new nanogui::Label(this, "Camera PPS (Since Camera Power On)", "sans-bold");
-        this->CameraPPS = new nanogui::TextBox(this, "");
-        new nanogui::Label(this, "Camera PPS (Local)", "sans-bold");
-        this->CameraSystemLocalPPS = new nanogui::TextBox(this, "");
-        new nanogui::Label(this, "Camera PPS (UTC)", "sans-bold");
-        this->CameraSystemUTCPPS = new nanogui::TextBox(this, "");
-        new nanogui::Label(this, "Camera PPS Jitter (ns)", "sans-bold");
-        this->CameraPPSJitter = new nanogui::TextBox(this, "");
-        new nanogui::Label(this, "System PPS Jitter (us)", "sans-bold");
-        this->CameraSystemPPSJitter = new nanogui::TextBox(this, "");
     };
 
     nanogui::TextBox *pixelFormat = nullptr;
@@ -76,11 +66,6 @@ public:
     nanogui::IntBox<int> *framesReceivedValue = nullptr;
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;
-    nanogui::TextBox *CameraPPS;
-    nanogui::TextBox *CameraSystemLocalPPS;
-    nanogui::TextBox *CameraSystemUTCPPS;
-    nanogui::TextBox *CameraPPSJitter;
-    nanogui::TextBox *CameraSystemPPSJitter;
 
     nanogui::Button *externalButton;
 
