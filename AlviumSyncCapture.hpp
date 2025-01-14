@@ -13,7 +13,7 @@
 /*****************************************************************************/
 #include <iostream>
 
-#include "GUIScreen.hpp"
+#include "GUIControl.hpp"
 #include "GNSS.hpp"
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
 #include "ImagePreviewWindow.hpp"
@@ -39,7 +39,7 @@ public:
     void run(void);
 
 private:
-    GUIScreen screen;
+    GUIControl controlScreen;
     GNSS gnss;
     AlliedVisionAlvium camera;
 
@@ -58,6 +58,7 @@ private:
 
     std::atomic<double> currentExposureUs = 0;
     std::atomic<double> currentGainDb = 0;
+    std::atomic<double> calculatedCameraFPS = 0;
     std::atomic<int64_t> triggerFrequency = 0;
     std::atomic<int64_t> lastSystemTimeAtCameraPPS = 0;
     std::atomic<int64_t> lastSystemTimeJitter = 0;
@@ -174,19 +175,11 @@ private:
     /**
      * @brief
      *
-     * @param frame
-     * @param systemTimestampSeconds
-     * @param systemTimestampNanpseconds
-     * @param cameraTimestamp
-     * @param cameraFrameId
+     * @param frameData
      * @param arg
      */
     static void frameReceviedFunction(
-        cv::Mat frame,
-        time_t systemTimestampSeconds,
-        time_t systemTimestampNanpseconds,
-        uint64_t cameraTimestamp,
-        uint64_t cameraFrameId,
+        AlliedVisionAlviumFrameData &frameData,
         void *arg);
 
     /**

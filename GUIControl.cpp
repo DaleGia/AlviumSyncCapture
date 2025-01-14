@@ -1,5 +1,5 @@
 /**
- * @file GUIScreen.cpp
+ * @file GUIControl.cpp
  * Copyright (c) 2024 Dale Giancono All rights reserved.
  *
  * @brief
@@ -8,7 +8,7 @@
 /*****************************************************************************/
 /*INLCUDES                                                                   */
 /*****************************************************************************/
-#include "GUIScreen.hpp"
+#include "GUIControl.hpp"
 #include <thread>
 
 /**************************s***************************************************/
@@ -18,7 +18,7 @@
 /*****************************************************************************/
 /* CLASS DECLARATION                                                                      */
 /*****************************************************************************/
-GUIScreen::GUIScreen()
+GUIControl::GUIControl()
 {
     /*
     So what do we want to do? We want to have a welcome screen saying please
@@ -32,7 +32,7 @@ GUIScreen::GUIScreen()
         new nanogui::Screen(
             Eigen::Vector2i(
                 600,
-                850),
+                900),
             "AlviumSyncCapture");
 
     capture =
@@ -44,10 +44,10 @@ GUIScreen::GUIScreen()
             0);
 
     cameraWindow =
-        new GUICameraWindow(screen, 300, 600, 0, 250);
+        new GUICameraWindow(screen, 325, 600, 0, 250);
 
     gnssWindow =
-        new GUIGNSSWindow(screen, 300, 600, 0, 550);
+        new GUIGNSSWindow(screen, 325, 600, 0, 575);
     this->capture->setVisible(true);
     this->cameraWindow->setVisible(true);
     this->gnssWindow->setVisible(true);
@@ -55,7 +55,7 @@ GUIScreen::GUIScreen()
     screen->performLayout();
 }
 
-void GUIScreen::start()
+void GUIControl::start()
 {
     nanogui::mainloop();
     nanogui::shutdown();

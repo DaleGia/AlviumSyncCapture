@@ -43,6 +43,11 @@ public:
         new nanogui::Label(this, "Exposure (us):", "sans-bold");
         this->exposure = new nanogui::FloatBox<double>(this, 0);
         this->exposure->setEditable(true);
+        new nanogui::Label(this, "Binning:", "sans-bold");
+        this->binning = new nanogui::IntBox<int>(this, 1);
+        this->binning->setEditable(true);
+        new nanogui::Label(this, "FPS:", "sans-bold");
+        this->calculatedFPS = new nanogui::TextBox(this, "");
         new nanogui::Label(this, "Frames Received:", "sans-bold");
         this->framesReceivedValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "Frames Saved:", "sans-bold");
@@ -61,8 +66,9 @@ public:
 
     nanogui::TextBox *pixelFormat = nullptr;
     nanogui::FloatBox<double> *gain = nullptr;
-    nanogui::FloatBox<double> *triggerRate = nullptr;
+    nanogui::TextBox *calculatedFPS = nullptr;
     nanogui::FloatBox<double> *exposure = nullptr;
+    nanogui::IntBox<int> *binning = nullptr;
     nanogui::IntBox<int> *framesReceivedValue = nullptr;
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;

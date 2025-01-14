@@ -11,7 +11,7 @@ add_executable(AlviumSyncCapture main.cpp)
 
 # add(SOURCES submodule/b.c)
 target_sources(${PROJECT_NAME} PRIVATE "AlviumSyncCapture.cpp")
-target_sources(${PROJECT_NAME} PRIVATE "GUIScreen.cpp")
+target_sources(${PROJECT_NAME} PRIVATE "GUIControl.cpp")
 target_sources(${PROJECT_NAME} PRIVATE "GNSS.cpp")
 target_sources(${PROJECT_NAME} PRIVATE "AlliedVisionAlvium/AlliedVisionAlvium.cpp")
 

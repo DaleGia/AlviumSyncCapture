@@ -55,7 +55,8 @@ public:
                 currentDisplayImage,
                 CV_8UC1);
         }
-        cv::imshow(name, currentDisplayImage);
+
+        cv::imshow(this->name, currentDisplayImage);
         cv::waitKey(50);
     };
 
@@ -91,21 +92,36 @@ public:
         maxVal = statsMax * percent;
         double newMaxVal = maxVal + (maxVal - statsMin);
 
-        if (true == isColour)
+        if (true == isColour && CV_8UC3)
         {
             image.convertTo(
                 currentDisplayImage,
                 CV_8UC3,
                 255.0 / (newMaxVal - minVal), -minVal * 255.0 / (newMaxVal - minVal));
         }
-        else
+        else if (true == isColour && CV_16UC3)
+        {
+            image.convertTo(
+                currentDisplayImage,
+                CV_8UC3,
+                65525.0 / (newMaxVal - minVal), -minVal * 65525.0 / (newMaxVal - minVal));
+        }
+        else if (image.type() == CV_8UC1)
         {
             image.convertTo(
                 this->currentDisplayImage,
                 CV_8UC1,
                 255.0 / (newMaxVal - minVal), -minVal * 255.0 / (newMaxVal - minVal));
         }
-        std::string title = "Min: " + std::to_string((int)statsMin) + " Max: " + std::to_string((int)statsMax) + " Mean: " + std::to_string((int)mean[0]) + " STD: " + std::to_string((int)std[0]);
+        else if (image.type() == CV_16UC1)
+        {
+            image.convertTo(
+                this->currentDisplayImage,
+                CV_8UC1,
+                4095.0 / (newMaxVal - minVal), -minVal * 4095.0 / (newMaxVal - minVal));
+        }
+        std::string title = "Min: " + std::to_string(static_cast<int>(statsMin)) + " Max: " + std::to_string(static_cast<int>(statsMax)) + " Mean: " + std::to_string(static_cast<int>(mean[0])) + " STD: " + std::to_string(static_cast<int>(std[0]));
+
         cv::setWindowTitle(this->name, title);
         cv::imshow(this->name, this->currentDisplayImage);
 

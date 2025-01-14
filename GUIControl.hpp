@@ -1,5 +1,5 @@
 /**
- * @file GUIScreen.hpp
+ * @file GUIControl.hpp
  * Copyright (c) 2023 Dale Giancono All rights reserved.
  *
  * @brief
@@ -20,12 +20,12 @@
 /*****************************************************************************/
 /* CLASS DECLARATION                                                                      */
 /*****************************************************************************/
-class GUIScreen
+class GUIControl
 {
 public:
-    GUIScreen();
+    GUIControl();
 
-    ~GUIScreen()
+    ~GUIControl()
     {
         nanogui::shutdown();
     };
