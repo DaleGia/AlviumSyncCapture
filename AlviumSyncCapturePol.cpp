@@ -8,9 +8,10 @@
 /*****************************************************************************/
 /*INLCUDES                                                                   */
 /*****************************************************************************/
-#include "AlviumSyncCapture.hpp"
+#include "AlviumSyncCapturePol.hpp"
 #include "unistd.h"
 #include <cstdlib>
+#include "PolCam.hpp"
 
 /*****************************************************************************/
 /* Class                                                                      */
@@ -430,8 +431,14 @@ void AlviumSyncCapture::run(void)
     std::thread imagePreviewThread(
         [this]
         {
-            ImagePreviewWindow imagePreview("Image Preview");
-            imagePreview.setSize(800, 600);
+            ImagePreviewWindow imagePreview("Image");
+            ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
+            ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
+
+            imagePreview.setSize(600, 400);
+            PolarisationDegreePreview.setSize(600, 400);
+            PolarisationAnglePreview.setSize(600, 400);
+            PolCam polCam;
 
             while (!exitDisplayThreadFlag)
             {
@@ -439,9 +446,43 @@ void AlviumSyncCapture::run(void)
                 this->lastRecievedImageMutex.lock();
                 frame = this->lastRecievedImage.clone();
                 this->lastRecievedImageMutex.unlock();
+
                 if (false == frame.empty())
                 {
+                    cv::Mat pol0;
+                    cv::Mat pol45;
+                    cv::Mat pol90;
+                    cv::Mat pol135;
+                    cv::Mat intensity;
+                    cv::Mat polarisationDegree;
+                    cv::Mat polarisationAngle;
+
+                    polCam.getPolarisation(
+                        frame,
+                        pol0,
+                        pol45,
+                        pol90,
+                        pol135,
+                        intensity,
+                        polarisationDegree,
+                        polarisationAngle);
+
                     imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
+
+                    cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
+                    polarisationDegree.convertTo(
+                        polarisationDegree,
+                        CV_8UC3);
+                    cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
+                    PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+
+                    cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
+                    polarisationAngle.convertTo(
+                        polarisationAngle,
+                        CV_8UC3);
+                    cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
+                    PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
+
                     this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                     this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                 }

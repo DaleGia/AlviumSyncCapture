@@ -6,26 +6,44 @@ include(CMakePrintHelpers)
 
 project(AlviumSyncCapture LANGUAGES CXX)
 set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17")
-# Compile a target using NanoGUI
-add_executable(AlviumSyncCapture main.cpp)
+set(CMAKE_BUILD_TYPE Debug)
 
-# add(SOURCES submodule/b.c)
-target_sources(${PROJECT_NAME} PRIVATE "AlviumSyncCapture.cpp")
-target_sources(${PROJECT_NAME} PRIVATE "GUIControl.cpp")
-target_sources(${PROJECT_NAME} PRIVATE "GNSS.cpp")
-target_sources(${PROJECT_NAME} PRIVATE "AlliedVisionAlvium/AlliedVisionAlvium.cpp")
+# Add source files for executable 1
+set(AlviumSyncCapture_SOURCES
+    AlviumSyncCapture.cpp
+    GUIControl.cpp
+    AlliedVisionAlvium/AlliedVisionAlvium.cpp
+    GNSS.cpp)
+add_executable(AlviumSyncCapture ${AlviumSyncCapture_SOURCES})
+
+# Add source files for executable 1
+set(AlviumSyncCapturePOL_SOURCES
+    AlviumSyncCapturePol.cpp
+    GUIControl.cpp
+    AlliedVisionAlvium/AlliedVisionAlvium.cpp
+    GNSS.cpp)
+add_executable(AlviumSyncCapturePol ${AlviumSyncCapturePOL_SOURCES})
+
+# Add source files for executable 1
+set(POLTEST_SOURCES
+    test/PolCamTest.cpp)
+add_executable(PolCamTest ${POLTEST_SOURCES})
+
 
 #########################ALLIED VISION VIMBAX STUFF ####################
 # add hardcoded guesses for the location of Vmb to CMAKE_PREFIX_PATH
 list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api")
-list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api/include/VmbCPP")
-list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api/include/VmbImageTransform")
-list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/lib")
-list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/lib/cmake")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api/include/")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api/include/VmbCPP/")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/api/include/VmbImageTransform/")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/lib/")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/VimbaX/lib/cmake/")
 find_package(Vmb REQUIRED COMPONENTS CPP)
 find_package(Vmb REQUIRED COMPONENTS ImageTransform)
 target_link_libraries(AlviumSyncCapture nanogui Vmb::CPP)
 target_link_libraries(AlviumSyncCapture nanogui Vmb::ImageTransform)
+target_link_libraries(AlviumSyncCapturePol nanogui Vmb::CPP)
+target_link_libraries(AlviumSyncCapturePol nanogui Vmb::ImageTransform)
 
 ############## nanogui STUFF ########################################
 # Disable building extras we won't need (pure C++ project)
@@ -50,13 +68,17 @@ include_directories(nanogui/include)
 # Lastly, additional libraries may have been built for you.  In addition to linking
 # against NanoGUI, we need to link against those as well.
 target_link_libraries(AlviumSyncCapture nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(AlviumSyncCapturePol nanogui ${NANOGUI_EXTRA_LIBS})
 
 # file(GLOB_RECURSE SRC_DIR "nanogui/*.c" "nanogui/*.h")
 
 ############## OpenCV STUFF ########################################
 find_package(OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
-target_link_libraries(AlviumSyncCapture nanogui ${OpenCV_LIBS} )
+target_link_libraries(AlviumSyncCapture ${OpenCV_LIBS} )
+target_link_libraries(AlviumSyncCapturePol ${OpenCV_LIBS} )
+target_link_libraries(PolCamTest ${OpenCV_LIBS} )
+
 ##################################################################
 
 ############## GPSD STUFF ########################################
@@ -79,9 +101,12 @@ IF(GPSD_FOUND)
 ENDIF(GPSD_FOUND)
 
 include_directories( ${GPSD_INCLUDE_DIRS} )
-target_link_libraries(AlviumSyncCapture nanogui ${GPSD_LIBS} )
+target_link_libraries(AlviumSyncCapture ${GPSD_LIBS} )
+target_link_libraries(AlviumSyncCapturePol ${GPSD_LIBS} )
 
 ##################################################################
 
 ############## cfitsio ############################################
-target_link_libraries(AlviumSyncCapture nanogui "cfitsio")
+target_link_libraries(AlviumSyncCapture  "cfitsio")
+target_link_libraries(AlviumSyncCapturePol "cfitsio")
+target_link_libraries(PolCamTest "cfitsio")

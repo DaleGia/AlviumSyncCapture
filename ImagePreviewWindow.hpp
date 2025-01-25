@@ -120,7 +120,14 @@ public:
                 CV_8UC1,
                 4095.0 / (newMaxVal - minVal), -minVal * 4095.0 / (newMaxVal - minVal));
         }
-        std::string title = "Min: " + std::to_string(static_cast<int>(statsMin)) + " Max: " + std::to_string(static_cast<int>(statsMax)) + " Mean: " + std::to_string(static_cast<int>(mean[0])) + " STD: " + std::to_string(static_cast<int>(std[0]));
+        else
+        {
+            cv::normalize(image, currentDisplayImage, 0, 255, cv::NORM_MINMAX);
+            currentDisplayImage.convertTo(
+                currentDisplayImage,
+                CV_8UC3);
+        }
+        std::string title = name + " Min: " + std::to_string(static_cast<int>(statsMin)) + " Max: " + std::to_string(static_cast<int>(statsMax)) + " Mean: " + std::to_string(static_cast<int>(mean[0])) + " STD: " + std::to_string(static_cast<int>(std[0]));
 
         cv::setWindowTitle(this->name, title);
         cv::imshow(this->name, this->currentDisplayImage);
