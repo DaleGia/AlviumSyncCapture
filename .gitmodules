@@ -7,3 +7,6 @@
 [submodule "OpenCVFITS"]
 	path = OpenCVFITS
 	url = https://github.com/DaleGia/OpenCVFITS.git
+[submodule "argparse"]
+	path = argparse
+	url = git@github.com:DaleGia/argparse.git

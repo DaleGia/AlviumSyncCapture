@@ -31,24 +31,26 @@ class AlviumSyncCapture
 {
 public:
     AlviumSyncCapture();
+    AlviumSyncCapture(std::string cameraName) : cameraName(cameraName) {};
 
     /**
      * @brief
      *
      */
-    void run(void);
+    void run(std::string name, bool polarimetricFlag);
 
 private:
     GUIControl controlScreen;
     GNSS gnss;
     AlliedVisionAlvium camera;
+    std::string cameraName;
 
     std::mutex lastRecievedImageMutex;
     cv::Mat lastRecievedImage;
     std::atomic<bool> exitDisplayThreadFlag = false;
 
     std::atomic<bool> isImageReceptionEnabled = false;
-    std::atomic<bool> isSavingEnable = false;
+    std::atomic<bool> isSavingEnabled = false;
     std::atomic<bool> isGNSSTriggeringEnabled = false;
     std::atomic<uint64_t>
         receivedFramesCount = 0;
@@ -56,9 +58,6 @@ private:
     std::string currentRootSavePath;
     std::string currentSavePath;
 
-    std::atomic<double> currentExposureUs = 0;
-    std::atomic<double> currentGainDb = 0;
-    std::atomic<double> calculatedCameraFPS = 0;
     std::atomic<int64_t> triggerFrequency = 0;
     std::atomic<int64_t> lastSystemTimeAtCameraPPS = 0;
     std::atomic<int64_t> lastSystemTimeJitter = 0;
@@ -195,6 +194,10 @@ private:
         time_t systemTimestampSeconds,
         time_t systemTimestampNanoseconds,
         void *arg);
+
+    static void previewFunction();
+
+    static void polPreviewFunction();
 };
 
 #endif // ALVIUMSYNCCAPTURE_H_
