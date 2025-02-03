@@ -1,12 +1,12 @@
 [submodule "nanogui"]
 	path = nanogui
-	url = git@github.com:DaleGia/nanogui.git
+	url = https://github.com/DaleGia/nanogui.git
 [submodule "AlliedVisionAlvium"]
 	path = AlliedVisionAlvium
-	url = git@github.com:DaleGia/AlliedVisionAlvium.git
+	url = https://github.com/DaleGia/AlliedVisionAlvium.git
 [submodule "OpenCVFITS"]
 	path = OpenCVFITS
 	url = https://github.com/DaleGia/OpenCVFITS.git
 [submodule "argparse"]
 	path = argparse
-	url = git@github.com:DaleGia/argparse.git
+	url = https://github.com/DaleGia/argparse.git
