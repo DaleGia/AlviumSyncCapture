@@ -20,5 +20,5 @@ cmake ..
 cmake --build .
 cd ..
 
-cp ntp.conf /etc/ntpsec/ntp.conf
+sudo cp ntp.conf /etc/ntpsec/ntp.conf
 systemctl restart ntpsec.service
