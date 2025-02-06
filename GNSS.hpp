@@ -53,12 +53,12 @@ private:
     std::thread thread;
     struct gps_data_t gpsData;
 
-    std::atomic<double> latitude = 0.0;
-    std::atomic<double> longitude = 0.0;
-    std::atomic<double> altitudeMSL = 0.0;
-    std::atomic<double> timeSeconds = 0.0;
-    std::atomic<double> timeNanoSeconds = 0.0;
-    std::atomic<double> timeUncertantitySeconds = 0.0;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double altitudeMSL = 0.0;
+    double timeSeconds = 0.0;
+    double timeNanoSeconds = 0.0;
+    double timeUncertantitySeconds = 0.0;
 
     std::string mode;
 

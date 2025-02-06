@@ -52,6 +52,9 @@ public:
         this->framesReceivedValue = new nanogui::IntBox<int>(this, 0);
         new nanogui::Label(this, "Frames Saved:", "sans-bold");
         this->framesSavedValue = new nanogui::IntBox<int>(this, 0);
+        new nanogui::Label(this, "Camera Temperature:", "sans-bold");
+        this->temperatureValue = new nanogui::FloatBox<double>(this, 0);
+
         new nanogui::Label(this, "Preview Stretch:", "sans-bold");
         previewStretchSlider = new nanogui::Slider(this);
         previewStretchSlider->setRange(std::pair<float, float>(0.01, 1));
@@ -71,6 +74,7 @@ public:
     nanogui::IntBox<int> *binning = nullptr;
     nanogui::IntBox<int> *framesReceivedValue = nullptr;
     nanogui::IntBox<int> *framesSavedValue = nullptr;
+    nanogui::FloatBox<double> *temperatureValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;
 
     nanogui::Button *externalButton;

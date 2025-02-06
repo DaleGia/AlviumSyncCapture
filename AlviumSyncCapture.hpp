@@ -19,6 +19,7 @@
 #include "ImagePreviewWindow.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 #include <opencv2/opencv.hpp>
+#include "AlliedVisionAlvium/PPSSync.hpp"
 
 /*****************************************************************************/
 /*MACROS                                                             */
@@ -32,7 +33,10 @@ class AlviumSyncCapture
 public:
     AlviumSyncCapture();
     AlviumSyncCapture(std::string cameraName) : cameraName(cameraName) {};
-
+    ~AlviumSyncCapture()
+    {
+        this->camera.disconnect();
+    };
     /**
      * @brief
      *
@@ -47,32 +51,35 @@ private:
 
     std::mutex lastRecievedImageMutex;
     cv::Mat lastRecievedImage;
-    std::atomic<bool> exitDisplayThreadFlag = false;
+    std::atomic<bool> exitFlag = false;
 
     std::atomic<bool> isImageReceptionEnabled = false;
     std::atomic<bool> isSavingEnabled = false;
     std::atomic<bool> isGNSSTriggeringEnabled = false;
-    std::atomic<uint64_t>
-        receivedFramesCount = 0;
-    std::atomic<uint64_t> savedFramesCount = 0;
+
+    uint64_t receivedFramesCount = 0;
+    uint64_t savedFramesCount = 0;
     std::string currentRootSavePath;
     std::string currentSavePath;
 
     std::atomic<int64_t> triggerFrequency = 0;
-    std::atomic<int64_t> lastSystemTimeAtCameraPPS = 0;
-    std::atomic<int64_t> lastSystemTimeJitter = 0;
-    std::atomic<int64_t> lastCameraPPSTimestamp = 0;
-    std::atomic<int64_t> lastCameraTimeJitter = 0;
-    std::atomic<int64_t> lastGNSSTime = 0;
 
-    std::atomic<double> lastLatitude = 0;
-    std::atomic<double> lastLongitude = 0;
-    std::atomic<double> lastAltitudeMSL = 0;
+    int64_t lastGNSSTime = 0;
+    double lastLatitude = 0;
+    double lastLongitude = 0;
+    double lastAltitudeMSL = 0;
+    std::mutex gnssMutex;
 
-    static const uint32_t IMAGEBUFFERSIZE = 10;
+    double lastSensorTemperature = 0;
+    double lastMainboardTemperature = 0;
+    std::mutex temperatureMutex;
+
+    static const uint32_t IMAGEBUFFERSIZE = 100;
     /* 12 seconds is 10 second exposure max plus 2*/
     static const uint32_t ACQUIRESINGLEIMAGETIMEOUT_MS = 12000U;
     OpenCVFITS fits;
+
+    PPSSync pps;
 
     void updateCameraCapture(void);
 
@@ -189,10 +196,10 @@ private:
      * @param arg
      */
     static void cameraPPSCallback(
-        std::string eventName,
-        int64_t value,
-        time_t systemTimestampSeconds,
-        time_t systemTimestampNanoseconds,
+        int64_t cameraPPSTimestamp,
+        int64_t systemPPSTimestamp,
+        int64_t cameraPPSJitter,
+        int64_t systemPPSJitter,
         void *arg);
 
     static void previewFunction();
