@@ -646,7 +646,6 @@ void AlviumSyncCapture::frameReceviedFunction(
     lastGNSSAltitudeMSL = self->lastAltitudeMSL;
     self->gnssMutex.unlock();
 
-    std::cout << frameData.exposureTimeUs << std::endl;
     if (self->isSavingEnabled.load())
     {
         std::tm *tmutc = std::gmtime(&frameData.systemImageReceivedTimestampSec);
