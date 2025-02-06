@@ -532,7 +532,7 @@ void AlviumSyncCapture::run(
                         this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                         this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                     }
-                    usleep(500000);
+                    usleep(100000);
                 }
             }
             else
@@ -592,7 +592,7 @@ void AlviumSyncCapture::run(
                         this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                         this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                     }
-                    usleep(500000);
+                    usleep(100000);
                 }
             }
         });
