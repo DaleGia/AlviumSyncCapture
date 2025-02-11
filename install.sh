@@ -14,7 +14,7 @@ sudo ldconfig
 
 
 #Installs required dependencies
-sudo apt-get install -y g++ cmake xorg-dev libglu1-mesa-dev libstdc++6 libopencv-dev libcfitsio-dev gpsd libgps-dev ntpsec
+sudo apt-get install -y g++ cmake xorg-dev libglu1-mesa-dev libstdc++6 libopencv-dev libcfitsio-dev gpsd libgps-dev ntpsec gpsd-clients
 
 #Builds the project
 cd ..
