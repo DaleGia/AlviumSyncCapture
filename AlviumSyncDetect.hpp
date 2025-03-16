@@ -1,8 +1,8 @@
-#ifndef ALVIUMSYNCCAPTUREPOL_H_
-#define ALVIUMSYNCCAPTUREPOL_H_
+#ifndef AlviumSyncDetect_H_
+#define AlviumSyncDetect_H_
 
 /**
- * @file AlviumSyncCapture.hpp
+ * @file AlviumSyncDetect.hpp
  * Copyright (c) 2024 Dale Giancono All rights reserved.
  *
  * @brief
@@ -13,12 +13,12 @@
 /*****************************************************************************/
 #include <iostream>
 
-#include "GUIControl.hpp"
-#include "GNSS.hpp"
-#include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
-#include "ImagePreviewWindow.hpp"
+#include "GUIDetect.hpp"
+#include "AlliedVisionAlvium/AlliedVisionAlviumPPSSync.hpp"
+#include "ImageTransientDetection/ImagePreviewWindow.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 #include <opencv2/opencv.hpp>
+#include "AlliedVisionAlvium/PPSSync.hpp"
 
 /*****************************************************************************/
 /*MACROS                                                             */
@@ -27,53 +27,49 @@
 /*****************************************************************************/
 /* CLASS DECLARATION                                                                      */
 /*****************************************************************************/
-class AlviumSyncCapture
+class AlviumSyncDetect
 {
 public:
-    AlviumSyncCapture();
-
+    AlviumSyncDetect();
+    AlviumSyncDetect(std::string cameraName) : cameraName(cameraName) {};
+    ~AlviumSyncDetect()
+    {
+        this->camera.disconnect();
+    };
     /**
      * @brief
      *
      */
-    void run(void);
+    void run(std::string name, bool polarimetricFlag);
 
 private:
-    GUIControl controlScreen;
-    GNSS gnss;
-    AlliedVisionAlvium camera;
+    GUIDetect screen;
+    AlliedVisionAlviumPPSSync camera;
+    std::string cameraName;
 
-    std::mutex lastRecievedImageMutex;
-    cv::Mat lastRecievedImage;
-    std::atomic<bool> exitDisplayThreadFlag = false;
+    std::atomic<bool> exitFlag = false;
 
     std::atomic<bool> isImageReceptionEnabled = false;
-    std::atomic<bool> isSavingEnable = false;
+    std::atomic<bool> isSavingEnabled = false;
     std::atomic<bool> isGNSSTriggeringEnabled = false;
-    std::atomic<uint64_t>
-        receivedFramesCount = 0;
-    std::atomic<uint64_t> savedFramesCount = 0;
+
+    uint64_t receivedFramesCount = 0;
+    uint64_t savedFramesCount = 0;
     std::string currentRootSavePath;
     std::string currentSavePath;
 
-    std::atomic<double> currentExposureUs = 0;
-    std::atomic<double> currentGainDb = 0;
-    std::atomic<double> calculatedCameraFPS = 0;
     std::atomic<int64_t> triggerFrequency = 0;
-    std::atomic<int64_t> lastSystemTimeAtCameraPPS = 0;
-    std::atomic<int64_t> lastSystemTimeJitter = 0;
-    std::atomic<int64_t> lastCameraPPSTimestamp = 0;
-    std::atomic<int64_t> lastCameraTimeJitter = 0;
-    std::atomic<int64_t> lastGNSSTime = 0;
 
-    std::atomic<double> lastLatitude = 0;
-    std::atomic<double> lastLongitude = 0;
-    std::atomic<double> lastAltitudeMSL = 0;
+    double lastSensorTemperature = 0;
+    double lastMainboardTemperature = 0;
+    std::mutex temperatureMutex;
 
-    static const uint32_t IMAGEBUFFERSIZE = 10;
+    static const uint32_t IMAGEBUFFERSIZE = 100;
     /* 12 seconds is 10 second exposure max plus 2*/
     static const uint32_t ACQUIRESINGLEIMAGETIMEOUT_MS = 12000U;
     OpenCVFITS fits;
+
+    GNSS gnss;
 
     void updateCameraCapture(void);
 
@@ -179,7 +175,7 @@ private:
      * @param arg
      */
     static void frameReceviedFunction(
-        AlliedVisionAlviumFrameData &frameData,
+        AlliedVisionAlviumPPSSynchronisedFrameData &frameData,
         void *arg);
 
     /**
@@ -190,11 +186,15 @@ private:
      * @param arg
      */
     static void cameraPPSCallback(
-        std::string eventName,
-        int64_t value,
-        time_t systemTimestampSeconds,
-        time_t systemTimestampNanoseconds,
+        int64_t cameraPPSTimestamp,
+        int64_t systemPPSTimestamp,
+        int64_t cameraPPSJitter,
+        int64_t systemPPSJitter,
         void *arg);
+
+    static void previewFunction();
+
+    static void polPreviewFunction();
 };
 
-#endif // ALVIUMSYNCCAPTURE_H_
+#endif // AlviumSyncDetect_H_

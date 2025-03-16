@@ -14,9 +14,9 @@
 #include <iostream>
 
 #include "GUIControl.hpp"
-#include "GNSS.hpp"
+#include "AlliedVisionAlvium/GNSS.hpp"
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
-#include "ImagePreviewWindow.hpp"
+#include "ImageTransientDetection/ImagePreviewWindow.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 #include <opencv2/opencv.hpp>
 #include "AlliedVisionAlvium/PPSSync.hpp"

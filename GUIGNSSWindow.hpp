@@ -50,9 +50,6 @@ public:
         this->LocationBox = new nanogui::TextBox(this, "");
         new nanogui::Label(this, "Altitude MSL:", "sans-bold");
         this->altitudeMSLBox = new nanogui::TextBox(this, "");
-        new nanogui::Label(this, "Trigger Frequency:", "sans-bold");
-        this->triggerFrequencyBox = new nanogui::IntBox<uint32_t>(this, 0);
-        this->triggerFrequencyBox->setEditable(true);
     };
 
     nanogui::TextBox *TimeUTCBox = nullptr;
@@ -62,7 +59,6 @@ public:
     nanogui::TextBox *CameraSystemPPSJitter;
     nanogui::TextBox *LocationBox = nullptr;
     nanogui::TextBox *altitudeMSLBox = nullptr;
-    nanogui::IntBox<uint32_t> *triggerFrequencyBox = nullptr;
 
     const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
     const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);

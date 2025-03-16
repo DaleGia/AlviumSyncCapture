@@ -1,5 +1,5 @@
 /**
- * @file AlviumSyncCapture.c
+ * @file AlviumSyncDetect.c
  * Copyright (c) 2023 Dale Giancono All rights reserved.
  *
  * @brief
@@ -8,18 +8,21 @@
 /*****************************************************************************/
 /*INLCUDES                                                                   */
 /*****************************************************************************/
-#include "AlviumSyncCapturePol.hpp"
+#include "AlviumSyncDetect.hpp"
+#include "argparse/include/argparse/argparse.hpp"
+#include "PolCam.hpp"
 #include "unistd.h"
 #include <cstdlib>
-#include "PolCam.hpp"
 
 /*****************************************************************************/
 /* Class                                                                      */
 /*****************************************************************************/
-AlviumSyncCapture::AlviumSyncCapture() {
+AlviumSyncDetect::AlviumSyncDetect() {
 };
 
-void AlviumSyncCapture::run(void)
+void AlviumSyncDetect::run(
+    std::string name = "",
+    bool polarimetricFlag = false)
 {
     gnss.start(
         [this](
@@ -35,14 +38,9 @@ void AlviumSyncCapture::run(void)
             location += " ";
             location += std::to_string(longitude);
 
-            this->controlScreen.gnssWindow->LocationBox->setValue(location);
-            this->controlScreen.gnssWindow->altitudeMSLBox->setValue(std::to_string(altitude));
+            this->screen.gnssWindow->LocationBox->setValue(location);
+            this->screen.gnssWindow->altitudeMSLBox->setValue(std::to_string(altitude));
             double timeTotal = timeSeconds + timeNanoseconds;
-
-            this->lastGNSSTime = timeTotal;
-            this->lastLatitude = latitude;
-            this->lastLongitude = longitude;
-            this->lastAltitudeMSL.store(altitude);
 
             // Convert to a time_t object
             time_t gnss_unix_timestamp = timeTotal;
@@ -50,48 +48,48 @@ void AlviumSyncCapture::run(void)
             // Format the time using stringstream
             std::stringstream ss;
             ss << std::put_time(tm_obj, "%Y-%m-%d %H:%M:%S");
-            this->controlScreen.gnssWindow->TimeUTCBox->setValue(ss.str());
+            this->screen.gnssWindow->TimeUTCBox->setValue(ss.str());
         });
 
-    int frequency;
-    if (true == getGNSSTriggerFrequency(frequency))
-    {
-        this->triggerFrequency = frequency;
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(frequency);
-    }
-    else
-    {
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(0);
-    }
-
     /* Try to connect to a camera. Fail if you cannot */
-    if (false == camera.connect())
+    if ("" == name)
     {
-        return;
+        /* No camera name specified. Just try and connect to any camera */
+        if (false == camera.connect())
+        {
+            std::cerr << "Unable to connect to camera..." << std::endl;
+        }
+    }
+    /* If this fails, could not connect to camera. Get OUT. */
+    else if (false == camera.connectByUserId(name))
+    {
+        std::cerr << "Unable to connect to " << name << "..." << std::endl;
     }
 
-    /* Disable this to enable full framerate possible */
-    if (false == camera.setFeature("DeviceLinkThroughputLimitMode", "Off"))
+    if (true == camera.isCameraOpen())
     {
-        std::cerr << "Unable to disable DeviceLinkThroughputLimit... Maximum framerate may be affected..." << std::endl;
-    }
+        /* Disable this to enable full framerate possible */
+        if (false == camera.setFeature("DeviceLinkThroughputLimitMode", "Off"))
+        {
+            std::cerr << "Unable to disable DeviceLinkThroughputLimit... Maximum framerate may be affected..." << std::endl;
+        }
 
-    if (false == this->enablePPSEvent())
-    {
-        std::cerr << "Unable to enable PPS on camera... Something is wrong..." << std::endl;
-    }
+        std::string cameraName = camera.getName();
+        std::cout << cameraName << std::endl;
+        this->screen.capture->connectedCamera->setValue(cameraName);
 
-    std::string cameraName = camera.getName();
-    std::cout << cameraName << std::endl;
-    this->controlScreen.capture->connectedCamera->setValue(cameraName);
+        /* Create the screen and update the connected camera */
+        this->enableExternalTriggering();
+        this->updateCameraCapture();
+    }
 
     /* Set what happens when the acquise image button is pushed */
-    this->controlScreen.capture->acquireButton->setCallback(
+    this->screen.capture->acquireButton->setCallback(
         [this]
         {
-            if (false == isImageReceptionEnabled)
+            if (false == isImageReceptionEnabled.load())
             {
-                if (true == this->isSavingEnable)
+                if (true == this->isSavingEnabled.load())
                 {
                     this->createNewFITS();
                 }
@@ -105,22 +103,23 @@ void AlviumSyncCapture::run(void)
         });
 
     /* Set what happens when the acquise image button is pushed */
-    this->controlScreen.capture->acquireSingleButton->setCallback(
+    this->screen.capture->acquireSingleButton->setCallback(
         [this]
         {
             std::cout << "Acuqiring single image" << std::endl;
-            if (false == this->isImageReceptionEnabled)
+            if (false == this->isImageReceptionEnabled.load())
             {
-                AlliedVisionAlviumFrameData frame;
+
+                AlliedVisionAlviumPPSSynchronisedFrameData frame;
 
                 /* We are not currently capturing... Lets start capturing*/
                 /* update the currently captureured camera values */
                 this->updateCameraCapture();
                 std::cout << "Camera Capture updated" << std::endl;
 
-                this->controlScreen.capture->acquireSingleButton->setCaption("Getting Image...");
-                this->controlScreen.capture->acquireSingleButton->setBackgroundColor(
-                    this->controlScreen.capture->RED);
+                this->screen.capture->acquireSingleButton->setCaption("Getting Image...");
+                this->screen.capture->acquireSingleButton->setBackgroundColor(
+                    this->screen.capture->RED);
 
                 /* start the camera acquisition */
                 if (true == this->camera.getSingleFrame(
@@ -134,13 +133,17 @@ void AlviumSyncCapture::run(void)
                 uint64_t timestamp = systemClockToUTC(now);
 
                 this->receivedFramesCount++;
-                this->lastRecievedImageMutex.lock();
-                this->lastRecievedImage = frame.image.clone();
-                this->lastRecievedImageMutex.unlock();
-                if (this->isSavingEnable)
+
+                /* Get the temperature to write to file. */
+                this->temperatureMutex.lock();
+                double sensorTemeprature = this->lastSensorTemperature;
+                double mainboardTemperature = this->lastMainboardTemperature;
+                this->temperatureMutex.unlock();
+
+                if (this->isSavingEnabled.load())
                 {
                     std::string directory;
-                    directory = controlScreen.capture->imageSaveLocation->value();
+                    directory = screen.capture->imageSaveLocation->value();
                     this->currentRootSavePath = directory;
 
                     auto milliseconds =
@@ -161,78 +164,74 @@ void AlviumSyncCapture::run(void)
                     {
                         std::cerr << "Could not add image to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("ExposureTime", frame.exposureTime))
+                    else if (false == singleFits.addKey2FITS("ExposureTime", frame.exposureTimeUs))
                     {
                         std::cerr << "Could not add ExposureTime to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("Gain", frame.gain))
+                    else if (false == singleFits.addKey2FITS("Gain", frame.gainDb))
                     {
                         std::cerr << "Could not add FrameID to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("cameraFrameStartTimestamp", frame.timestamp))
+                    else if (false == singleFits.addKey2FITS("sensorTemperature", sensorTemeprature))
                     {
-                        std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
+                        std::cerr << "Could not add sensorTemperature to fits file " << std::endl;
+                    }
+                    else if (false == singleFits.addKey2FITS("mainboardTemperature", mainboardTemperature))
+                    {
+                        std::cerr << "Could not add mainboardTemperature to fits file " << std::endl;
+                    }
+                    else if (false == singleFits.addKey2FITS("cameraFrameStartTimestamp", frame.cameraFrameStartTimestamp))
+                    {
+                        std::cerr << "Could not add cameraFrameStartTimestamp to fits file " << std::endl;
                     }
                     else if (false ==
                              singleFits.addKey2FITS(
                                  "systemImageReceptionTimestampUTC",
-                                 (frame.systemTimeSec * 1000000000) + frame.systemTimeNSec))
+                                 (frame.systemImageReceivedTimestamp)))
                     {
                         std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", this->lastSystemTimeAtCameraPPS.load()))
+                    else if (false == singleFits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", frame.systemTimestampAtLastPPS))
                     {
                         std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", this->lastSystemTimeJitter.load()))
+                    else if (false == singleFits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", frame.systemJitterAtLastPPS))
                     {
                         std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastCameraPPSTimestamp", this->lastCameraPPSTimestamp.load()))
+                    else if (false == singleFits.addKey2FITS("lastCameraPPSTimestamp", frame.cameraTimestampAtLastPPS))
                     {
                         std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", this->lastCameraTimeJitter.load()))
+                    else if (false == singleFits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", frame.cameraJitterAtLastCameraPPS))
                     {
                         std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastGNSSPPSTimestamp", this->lastGNSSTime.load()))
+                    else if (false == singleFits.addKey2FITS("lastGNSSPPSTimestamp", frame.lastGNSStimestamp))
                     {
                         std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastLatitude", this->lastLatitude.load()))
+                    else if (false == singleFits.addKey2FITS("lastLatitude", frame.lastGNSSLatitude))
                     {
                         std::cerr << "Could not add lastLatitude to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastLongitude", this->lastLongitude.load()))
+                    else if (false == singleFits.addKey2FITS("lastLongitude", frame.lastGNSSLongitude))
                     {
                         std::cerr << "Could not add lastLatitude to fits file " << std::endl;
                     }
-                    else if (false == singleFits.addKey2FITS("lastAltitudeMSL", this->lastAltitudeMSL.load()))
+                    else if (false == singleFits.addKey2FITS("lastAltitudeMSL", frame.lastGNSSAltitudeMSL))
                     {
                         std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
-                    }
-                    else if (false == singleFits.addKey2FITS("externalTriggerFrequency", this->triggerFrequency.load()))
-                    {
-                        std::cerr << "Could not add externalTriggerFrequency to fits file " << std::endl;
-                    }
-                    else if (false == singleFits.addKey2FITS("externalTriggerEnabled", (int64_t)this->isGNSSTriggeringEnabled.load()))
-                    {
-                        std::cerr << "Could not add externalTriggerEnabled to fits file " << std::endl;
                     }
                     else if (true == singleFits.closeFITS())
                     {
                         this->savedFramesCount++;
                     }
                 }
-                else
-                {
-                    std::cerr << "Unable to get single image... " << std::endl;
-                }
 
-                this->controlScreen.capture->acquireSingleButton->setCaption("Acquire single image");
-                this->controlScreen.capture->acquireSingleButton->setBackgroundColor(
-                    this->controlScreen.capture->GREEN);
+                this->screen.capture->acquireSingleButton->setCaption("Acquire single image");
+                this->screen.capture->acquireSingleButton->setBackgroundColor(
+                    this->screen.capture->GREEN);
             }
             else
             {
@@ -241,13 +240,13 @@ void AlviumSyncCapture::run(void)
         });
 
     /* Set what happens when the recording button is pushed */
-    controlScreen.capture->recordingButton->setCallback(
+    screen.capture->recordingButton->setCallback(
         [this]
         {
-            if (false == this->isSavingEnable)
+            if (false == this->isSavingEnabled.load())
             {
 
-                if (true == isImageReceptionEnabled)
+                if (true == isImageReceptionEnabled.load())
                 {
                     this->createNewFITS();
                 }
@@ -260,22 +259,8 @@ void AlviumSyncCapture::run(void)
             }
         });
 
-    /* Set what happens when the recording button is pushed */
-    controlScreen.cameraWindow->externalButton->setCallback(
-        [this]
-        {
-            if (false == this->isGNSSTriggeringEnabled)
-            {
-                this->enableExternalTriggering();
-            }
-            else
-            {
-                this->disableExternalTriggering();
-            }
-        });
-
     /* Set what happens when the pixel format is edited */
-    controlScreen.cameraWindow->pixelFormat->setCallback(
+    screen.cameraWindow->pixelFormat->setCallback(
         [this](std::string value)
         {
             if (false == this->camera.setFeature("PixelFormat", value))
@@ -290,8 +275,9 @@ void AlviumSyncCapture::run(void)
             this->updateCameraCapture();
             return true;
         });
+
     /* Set what happens when Gain is edited */
-    controlScreen.cameraWindow->gain->setCallback(
+    screen.cameraWindow->gain->setCallback(
         [this](double value)
         {
             if (false == this->camera.setFeature("Gain", std::to_string(value)))
@@ -307,7 +293,7 @@ void AlviumSyncCapture::run(void)
         });
 
     /* Set what happens when exposure is edited */
-    controlScreen.cameraWindow->exposure->setCallback(
+    screen.cameraWindow->exposure->setCallback(
         [this](double value)
         {
             if (false == camera.setFeature("ExposureTime", std::to_string(value)))
@@ -323,7 +309,7 @@ void AlviumSyncCapture::run(void)
         });
 
     /* Set what happens when binning is edited */
-    controlScreen.cameraWindow->binning->setCallback(
+    screen.cameraWindow->binning->setCallback(
         [this](int value)
         {
             if (false == camera.setFeature("BinningSelector", "Sensor"))
@@ -397,7 +383,7 @@ void AlviumSyncCapture::run(void)
         });
 
     /* Set what happens when exposure is edited */
-    controlScreen.cameraWindow->pixelFormat->setCallback(
+    screen.cameraWindow->pixelFormat->setCallback(
         [this](std::string value)
         {
             if (false == this->camera.setFeature("PixelFormat", value))
@@ -413,181 +399,149 @@ void AlviumSyncCapture::run(void)
             return true;
         });
 
-    controlScreen.gnssWindow->triggerFrequencyBox->setCallback(
-        [this](uint32_t value)
+    std::thread temperatureThread(
+        [this]
         {
-            int retFrequency;
-            if (false == this->setGNSSTriggerFrequency(value))
+            while (!exitFlag.load())
             {
-                this->triggerFrequency = 0;
-                return false;
-            }
-            else if (true == this->getGNSSTriggerFrequency(retFrequency))
-            {
-                this->triggerFrequency = retFrequency;
-                this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(retFrequency);
-            }
+                if (true == this->camera.isCameraOpen())
+                {
+                    std::string sensorTemperature = "0";
+                    std::string mainBoardTemperature = "0";
+                    if (false == this->camera.setFeature("DeviceTemperatureSelector", "Sensor"))
+                    {
+                        std::cerr << "Could not set DeviceTemperatureSelector to Sensor" << std::endl;
+                    }
+                    else if (false == this->camera.getFeature("DeviceTemperature", sensorTemperature))
+                    {
+                        std::cerr << "Could not get sensor temperature" << std::endl;
+                    }
+                    else if (false == this->camera.setFeature("DeviceTemperatureSelector", "Mainboard"))
+                    {
+                        std::cerr << "Could not set DeviceTemperatureSelector to Mainboard" << std::endl;
+                    }
+                    else if (false == this->camera.getFeature("DeviceTemperature", mainBoardTemperature))
+                    {
+                        std::cerr << "Could not get mainboard temperature" << std::endl;
+                    }
+                    else
+                    {
+                        this->temperatureMutex.lock();
+                        this->lastSensorTemperature = std::stod(sensorTemperature);
+                        this->lastMainboardTemperature = std::stod(mainBoardTemperature);
+                        this->temperatureMutex.unlock();
+                        this->screen.cameraWindow->temperatureValue->setValue(std::stod(mainBoardTemperature));
+                    }
+                }
 
-            return true;
+                sleep(60);
+            }
         });
 
     std::thread imagePreviewThread(
-        [this]
+        [this, polarimetricFlag]
         {
-            ImagePreviewWindow imagePreview("Image");
-            ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
-            ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
-
-            imagePreview.setSize(600, 400);
-            PolarisationDegreePreview.setSize(600, 400);
-            PolarisationAnglePreview.setSize(600, 400);
-            PolCam polCam;
-
-            while (!exitDisplayThreadFlag)
+            if (false == polarimetricFlag)
             {
-                cv::Mat frame;
-                this->lastRecievedImageMutex.lock();
-                frame = this->lastRecievedImage.clone();
-                this->lastRecievedImageMutex.unlock();
+                ImagePreviewWindow imagePreview("Image Preview");
+                imagePreview.setSize(800, 600);
 
-                if (false == frame.empty())
+                while (!exitFlag.load())
                 {
-                    cv::Mat pol0;
-                    cv::Mat pol45;
-                    cv::Mat pol90;
-                    cv::Mat pol135;
-                    cv::Mat intensity;
-                    cv::Mat polarisationDegree;
-                    cv::Mat polarisationAngle;
-
-                    polCam.getPolarisation(
-                        frame,
-                        pol0,
-                        pol45,
-                        pol90,
-                        pol135,
-                        intensity,
-                        polarisationDegree,
-                        polarisationAngle);
-
-                    imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
-
-                    cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
-                    polarisationDegree.convertTo(
-                        polarisationDegree,
-                        CV_8UC3);
-                    cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
-                    PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
-
-                    cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
-                    polarisationAngle.convertTo(
-                        polarisationAngle,
-                        CV_8UC3);
-                    cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
-                    PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
-
-                    this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
-                    this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
+                    cv::Mat frame;
+                    if (false == frame.empty())
+                    {
+                        imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
+                        this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
+                        this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
+                    }
+                    usleep(100000);
                 }
-                usleep(33000);
+            }
+            else
+            {
+                ImagePreviewWindow imagePreview("Image");
+                ImagePreviewWindow pol0Preview("Pol0");
+                ImagePreviewWindow pol45Preview("Pol45");
+                ImagePreviewWindow pol90Preview("Pol90");
+                ImagePreviewWindow pol135Preview("Pol135");
+
+                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
+                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
+
+                imagePreview.setSize(600, 400);
+                PolarisationDegreePreview.setSize(600, 400);
+                PolarisationAnglePreview.setSize(600, 400);
+                PolCam polCam;
+
+                while (!exitFlag.load())
+                {
+                    cv::Mat frame;
+
+                    if (false == frame.empty())
+                    {
+                        cv::Mat pol0;
+                        cv::Mat pol45;
+                        cv::Mat pol90;
+                        cv::Mat pol135;
+                        cv::Mat intensity;
+                        cv::Mat polarisationDegree;
+                        cv::Mat polarisationAngle;
+
+                        polCam.getPolarisation(
+                            frame,
+                            pol0,
+                            pol45,
+                            pol90,
+                            pol135,
+                            intensity,
+                            polarisationDegree,
+                            polarisationAngle);
+
+                        imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
+                        pol0Preview.setImageStreched(pol0, this->screen.cameraWindow->previewStretchSlider->value());
+                        pol45Preview.setImageStreched(pol45, this->screen.cameraWindow->previewStretchSlider->value());
+                        pol90Preview.setImageStreched(pol90, this->screen.cameraWindow->previewStretchSlider->value());
+                        pol135Preview.setImageStreched(pol135, this->screen.cameraWindow->previewStretchSlider->value());
+
+                        cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
+                        polarisationDegree.convertTo(
+                            polarisationDegree,
+                            CV_8UC3);
+                        cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
+                        PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+
+                        cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
+                        polarisationAngle.convertTo(
+                            polarisationAngle,
+                            CV_8UC3);
+                        cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
+                        PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
+
+                        this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
+                        this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
+                    }
+                    usleep(100000);
+                }
             }
         });
-    /* Create the screen and update the connected camera */
-    this->disableExternalTriggering();
-    this->updateCameraCapture();
 
-    this->controlScreen.start();
+    this->screen.start();
 }
 
-void AlviumSyncCapture::frameReceviedFunction(
-    AlliedVisionAlviumFrameData &frameData,
+void AlviumSyncDetect::frameReceviedFunction(
+    AlliedVisionAlviumPPSSynchronisedFrameData &frameData,
     void *arg)
 {
     // Get current time with milliseconds
-    AlviumSyncCapture *self = (AlviumSyncCapture *)arg;
+    AlviumSyncDetect *self = (AlviumSyncDetect *)arg;
+
     self->receivedFramesCount++;
 
-    self->lastRecievedImageMutex.lock();
-    self->lastRecievedImage = frameData.image.clone();
-    self->lastRecievedImageMutex.unlock();
-
-    if (self->isSavingEnable)
-    {
-        std::tm *tmutc = std::gmtime(&frameData.systemTimeSec);
-        time_t systemTimestamp = std::mktime(tmutc) + frameData.systemTimeNSec;
-
-        if (false == self->fits.addMat2FITS(frameData.image))
-        {
-            std::cerr << "Could not add image to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("ExposureTime", frameData.exposureTime))
-        {
-            std::cerr << "Could not add ExposureTime to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("Gain", frameData.gain))
-        {
-            std::cerr << "Could not add Gain to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("FrameID", frameData.frameId))
-        {
-            std::cerr << "Could not add FrameID to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("cameraFrameStartTimestamp", frameData.timestamp))
-        {
-            std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", systemTimestamp))
-        {
-            std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", self->lastSystemTimeAtCameraPPS.load()))
-        {
-            std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", self->lastSystemTimeJitter.load()))
-        {
-            std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastCameraPPSTimestamp", self->lastCameraPPSTimestamp.load()))
-        {
-            std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", self->lastCameraTimeJitter.load()))
-        {
-            std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastGNSSPPSTimestamp", self->lastGNSSTime.load()))
-        {
-            std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastLatitude", self->lastLatitude.load()))
-        {
-            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastLongitude", self->lastLongitude.load()))
-        {
-            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("lastAltitudeMSL", self->lastAltitudeMSL.load()))
-        {
-            std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("externalTriggerFrequency", self->triggerFrequency.load()))
-        {
-            std::cerr << "Could not add externalTriggerFrequency to fits file " << std::endl;
-        }
-        else if (false == self->fits.addKey2FITS("externalTriggerEnabled", (int64_t)self->isGNSSTriggeringEnabled))
-        {
-            std::cerr << "Could not add externalTriggerEnabled to fits file " << std::endl;
-        }
-        else
-        {
-            self->savedFramesCount++;
-        }
-    }
+    /* Add frames to detection here */
 }
 
-void AlviumSyncCapture::updateCameraCapture(void)
+void AlviumSyncDetect::updateCameraCapture(void)
 {
     std::string value;
     if (false == this->camera.getFeature("ExposureTime", value))
@@ -596,7 +550,7 @@ void AlviumSyncCapture::updateCameraCapture(void)
     }
     else
     {
-        this->controlScreen.cameraWindow->exposure->setValue(std::stod(value));
+        this->screen.cameraWindow->exposure->setValue(std::stod(value));
     }
 
     if (false == this->camera.getFeature("Gain", value))
@@ -605,7 +559,7 @@ void AlviumSyncCapture::updateCameraCapture(void)
     }
     else
     {
-        this->controlScreen.cameraWindow->gain->setValue(std::stod(value));
+        this->screen.cameraWindow->gain->setValue(std::stod(value));
     }
 
     if (false == this->camera.getFeature("PixelFormat", value))
@@ -614,7 +568,7 @@ void AlviumSyncCapture::updateCameraCapture(void)
     }
     else
     {
-        this->controlScreen.cameraWindow->pixelFormat->setValue(value);
+        this->screen.cameraWindow->pixelFormat->setValue(value);
     }
 
     if (false == this->camera.getFeature("BinningHorizontal", value))
@@ -623,10 +577,10 @@ void AlviumSyncCapture::updateCameraCapture(void)
     }
     else
     {
-        this->controlScreen.cameraWindow->binning->setValue(std::stoi(value));
+        this->screen.cameraWindow->binning->setValue(std::stoi(value));
     }
 
-    if (false == this->isGNSSTriggeringEnabled)
+    if (false == this->isGNSSTriggeringEnabled.load())
     {
         if (false == this->camera.getFeature("AcquisitionFrameRate", value))
         {
@@ -634,24 +588,24 @@ void AlviumSyncCapture::updateCameraCapture(void)
         }
         else
         {
-            this->controlScreen.cameraWindow->calculatedFPS->setValue(value);
+            this->screen.cameraWindow->calculatedFPS->setValue(value);
         }
     }
 }
 
-bool AlviumSyncCapture::startImageAcquisition(void)
+bool AlviumSyncDetect::startImageAcquisition(void)
 {
     /* We are not currently capturing... Lets start capturing*/
     /* update the currently captureured camera values */
     this->updateCameraCapture();
 
     /* start the camera acquisition */
-    if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncCapture::frameReceviedFunction, this))
+    if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncDetect::frameReceviedFunction, this))
     {
-        this->isImageReceptionEnabled = true;
-        this->controlScreen.capture->acquireButton->setCaption("Stop image acquisition");
-        this->controlScreen.capture->acquireButton->setBackgroundColor(
-            this->controlScreen.capture->RED);
+        this->isImageReceptionEnabled.store(true);
+        this->screen.capture->acquireButton->setCaption("Stop image acquisition");
+        this->screen.capture->acquireButton->setBackgroundColor(
+            this->screen.capture->RED);
         std::cout << "Started image acquisition... " << std::endl;
     }
     else
@@ -662,16 +616,16 @@ bool AlviumSyncCapture::startImageAcquisition(void)
 
     return true;
 }
-bool AlviumSyncCapture::stopImageAcquisition(void)
+bool AlviumSyncDetect::stopImageAcquisition(void)
 {
     /* We are currently capturing... Lets stop capturing*/
     /* Stop the camera acquisition */
     if (true == camera.stopAcquisition())
     {
-        this->isImageReceptionEnabled = false;
-        this->controlScreen.capture->acquireButton->setCaption("Start image acquisition");
-        this->controlScreen.capture->acquireButton->setBackgroundColor(
-            this->controlScreen.capture->GREEN);
+        this->isImageReceptionEnabled.store(false);
+        this->screen.capture->acquireButton->setCaption("Start image acquisition");
+        this->screen.capture->acquireButton->setBackgroundColor(
+            this->screen.capture->GREEN);
         std::cout << "Stopped image acquisition... " << std::endl;
     }
     else
@@ -683,7 +637,7 @@ bool AlviumSyncCapture::stopImageAcquisition(void)
     return true;
 }
 
-bool AlviumSyncCapture::createNewFITS(void)
+bool AlviumSyncDetect::createNewFITS(void)
 {
     // Get current time with milliseconds
     auto now = std::chrono::system_clock::now();
@@ -705,9 +659,9 @@ bool AlviumSyncCapture::createNewFITS(void)
     return true;
 }
 
-bool AlviumSyncCapture::startImageSaving(void)
+bool AlviumSyncDetect::startImageSaving(void)
 {
-    if (this->controlScreen.capture->imageSaveLocation->value() == "")
+    if (this->screen.capture->imageSaveLocation->value() == "")
     {
         std::cerr
             << "No save location selected... please select one in the capture window..." << std::endl;
@@ -717,7 +671,7 @@ bool AlviumSyncCapture::startImageSaving(void)
     {
         /* Get the current save location */
         std::string directory;
-        directory = this->controlScreen.capture->imageSaveLocation->value();
+        directory = this->screen.capture->imageSaveLocation->value();
         this->currentRootSavePath = directory;
 
         // Get current time with milliseconds
@@ -735,35 +689,35 @@ bool AlviumSyncCapture::startImageSaving(void)
             return false;
         }
 
-        this->isSavingEnable = true;
-        this->controlScreen.capture->recordingButton->setCaption("Stop Recording");
-        this->controlScreen.capture->recordingButton->setBackgroundColor(
-            controlScreen.capture->RED);
+        this->isSavingEnabled.store(true);
+        this->screen.capture->recordingButton->setCaption("Stop Recording");
+        this->screen.capture->recordingButton->setBackgroundColor(
+            screen.capture->RED);
         std::cout << "Started to record... " << std::endl;
 
         return true;
     }
 }
 
-bool AlviumSyncCapture::stopImageSaving(void)
+bool AlviumSyncDetect::stopImageSaving(void)
 {
-    this->isSavingEnable = false;
+    this->isSavingEnabled.store(false);
 
     this->fits.closeFITS();
 
-    controlScreen.capture->recordingButton->setCaption("Start Recording");
-    controlScreen.capture->recordingButton->setBackgroundColor(
-        controlScreen.capture->GREEN);
+    screen.capture->recordingButton->setCaption("Start Recording");
+    screen.capture->recordingButton->setBackgroundColor(
+        screen.capture->GREEN);
     std::cout << "Stopped recording... " << std::endl;
     return true;
 }
 
-bool AlviumSyncCapture::enableExternalTriggering(void)
+bool AlviumSyncDetect::enableExternalTriggering(void)
 {
-    if (false == this->isGNSSTriggeringEnabled)
+    if (false == this->isGNSSTriggeringEnabled.load())
     {
         /* Disable image reception if it is going */
-        if (true == this->isImageReceptionEnabled)
+        if (true == this->isImageReceptionEnabled.load())
         {
             this->stopImageAcquisition();
         }
@@ -805,41 +759,30 @@ bool AlviumSyncCapture::enableExternalTriggering(void)
             std::cerr << "Could not set TriggerSelector" << std::endl;
             return false;
         }
-        else if (false == this->camera.setFeature("TriggerMode", "On"))
-        {
-            std::cerr << "Could not set TriggerMode" << std::endl;
-            return false;
-        }
+        // else if (false == this->camera.setFeature("TriggerMode", "On"))
+        // {
+        //     std::cerr << "Could not set TriggerMode" << std::endl;
+        //     return false;
+        // }
         /* If we are here the camera is configured.*/
 
-        this->isGNSSTriggeringEnabled = true;
-        controlScreen.cameraWindow->externalButton->setCaption("Disable Triggering");
-        controlScreen.cameraWindow->externalButton->setBackgroundColor(
-            controlScreen.cameraWindow->RED);
-
-        this->controlScreen.screen->performLayout();
+        this->isGNSSTriggeringEnabled.store(true);
+        this->screen.screen->performLayout();
         std::cout << "Triggering enabled... " << std::endl;
     }
 
-    int frequency;
-    if (true == this->getGNSSTriggerFrequency(frequency))
-    {
-        this->triggerFrequency = frequency;
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(frequency);
-    }
-
-    this->controlScreen.cameraWindow->calculatedFPS->setValue("");
+    this->screen.cameraWindow->calculatedFPS->setValue("");
 
     return true;
 }
 
-bool AlviumSyncCapture::disableExternalTriggering(void)
+bool AlviumSyncDetect::disableExternalTriggering(void)
 {
     std::string value;
-    if (true == this->isGNSSTriggeringEnabled)
+    if (true == this->isGNSSTriggeringEnabled.load())
     {
         /* Disable image reception if it is going */
-        if (true == this->isImageReceptionEnabled)
+        if (true == this->isImageReceptionEnabled.load())
         {
             this->stopImageAcquisition();
         }
@@ -865,75 +808,28 @@ bool AlviumSyncCapture::disableExternalTriggering(void)
 
         /* If we are here the camera is configured.*/
     }
-    this->isGNSSTriggeringEnabled = false;
-
-    controlScreen.cameraWindow->externalButton->setCaption("Enable Triggering");
-    controlScreen.cameraWindow->externalButton->setBackgroundColor(
-        controlScreen.cameraWindow->GREEN);
-    this->controlScreen.screen->performLayout();
+    this->isGNSSTriggeringEnabled.store(false);
+    this->screen.screen->performLayout();
     std::cout << "Triggering Disabled... " << std::endl;
 
     updateCameraCapture();
     return true;
 }
 
-bool AlviumSyncCapture::enablePPSEvent(void)
-{
-    /* Configure the camera for external triggering */
-
-    if (false == this->camera.setFeature("LineSelector", "Line3"))
-    {
-        std::cerr << "Could not set LineSelector" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("LineMode", "Input"))
-    {
-        std::cerr << "Could not set LineMode" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("LineDebounceMode", "Off"))
-    {
-        std::cerr << "Could not set LineDebounceMode" << std::endl;
-        return false;
-    }
-
-    if (false == this->camera.activateEvent(
-                     "Line3RisingEdge",
-                     "EventLine3RisingEdgeTimestamp",
-                     cameraPPSCallback,
-                     this))
-    {
-        std::cerr << "Could not activate Line3RisingEdge for PPS event" << std::endl;
-
-        return false;
-    }
-
-    std::cout << "Enabled PPS" << std::endl;
-
-    return true;
-}
-
-void AlviumSyncCapture::cameraPPSCallback(
-    std::string eventName,
-    int64_t value,
-    time_t systemTimestampSeconds,
-    time_t systemTimestampNanoseconds,
+void AlviumSyncDetect::cameraPPSCallback(
+    int64_t cameraPPSTimestamp,
+    int64_t systemPPSTimestamp,
+    int64_t cameraPPSJitter,
+    int64_t systemPPSJitter,
     void *arg)
 {
-    AlviumSyncCapture *capture = (AlviumSyncCapture *)arg;
-    int64_t oldCameraPPS = capture->lastCameraPPSTimestamp;
-    int64_t oldSystemPPS = capture->lastSystemTimeAtCameraPPS;
-
-    int64_t cameraJitter = ((value - capture->lastCameraPPSTimestamp) - 1000000000) / 1000;
-    capture->lastCameraPPSTimestamp = value;
-    capture->lastSystemTimeAtCameraPPS = systemTimestampSeconds + systemTimestampNanoseconds;
-    capture->lastCameraTimeJitter = cameraJitter;
-
+    AlviumSyncDetect *capture = (AlviumSyncDetect *)arg;
     /* Update the camera PPS jtiter */
-    capture->controlScreen.gnssWindow->CameraPPSJitter->setValue(std::to_string(cameraJitter));
+    capture->screen.gnssWindow->CameraPPSJitter->setValue(
+        std::to_string(cameraPPSJitter));
 
-    time_t seconds = systemTimestampSeconds;
-    time_t milliseconds = systemTimestampNanoseconds / 1000000;
+    time_t seconds = systemPPSTimestamp / 1000000000LL;
+    time_t milliseconds = (systemPPSTimestamp % 1000000000LL) / 1000000LL;
     if (milliseconds > 700)
     {
         seconds += 1;
@@ -944,22 +840,20 @@ void AlviumSyncCapture::cameraPPSCallback(
     std::stringstream ss;
     ss << std::put_time(tm, "%Y/%m/%d %H:%M:%S");
     /* Plot of the gui*/
-    capture->controlScreen.gnssWindow->CameraSystemLocalPPS->setValue(ss.str());
+    capture->screen.gnssWindow->CameraSystemLocalPPS->setValue(ss.str());
 
     /* Convert the time point to UTC time string for display */
     std::tm *tmutc = std::gmtime(&seconds);
     std::stringstream ssutc;
     ssutc << std::put_time(tmutc, "%Y/%m/%d %H:%M:%S");
     /* Plot of the gui*/
-    capture->controlScreen.gnssWindow->CameraSystemUTCPPS->setValue(ssutc.str());
+    capture->screen.gnssWindow->CameraSystemUTCPPS->setValue(ssutc.str());
 
-    int64_t systemJitter = (capture->lastSystemTimeAtCameraPPS - oldSystemPPS) / 1000;
-    capture->lastSystemTimeJitter = systemJitter;
     /* Update the camera PPS jtiter */
-    capture->controlScreen.gnssWindow->CameraSystemPPSJitter->setValue(std::to_string(systemJitter));
+    capture->screen.gnssWindow->CameraSystemPPSJitter->setValue(std::to_string(systemPPSJitter));
 }
 
-bool AlviumSyncCapture::createNewSaveDirectory(std::string directoryName)
+bool AlviumSyncDetect::createNewSaveDirectory(std::string directoryName)
 {
     /* We need to create a new directory for the file
      * save location. Then if we are saving average frames
@@ -985,7 +879,7 @@ bool AlviumSyncCapture::createNewSaveDirectory(std::string directoryName)
     return true;
 }
 
-uint64_t AlviumSyncCapture::systemClockToUTC(std::chrono::system_clock::time_point now)
+uint64_t AlviumSyncDetect::systemClockToUTC(std::chrono::system_clock::time_point now)
 {
     // Convert to time_point in UTC
     std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
@@ -1004,7 +898,7 @@ uint64_t AlviumSyncCapture::systemClockToUTC(std::chrono::system_clock::time_poi
     return timestamp;
 };
 
-bool AlviumSyncCapture::setGNSSTriggerFrequency(int frequency)
+bool AlviumSyncDetect::setGNSSTriggerFrequency(int frequency)
 {
     std::string command;
     command = "ubxtool -z CFG-TP-FREQ_LOCK_TP2,";
@@ -1040,7 +934,7 @@ bool AlviumSyncCapture::setGNSSTriggerFrequency(int frequency)
     return true;
 }
 
-bool AlviumSyncCapture::getGNSSTriggerFrequency(int &frequency)
+bool AlviumSyncDetect::getGNSSTriggerFrequency(int &frequency)
 {
     FILE *fp = popen("ubxtool -g CFG-TP-FREQ_LOCK_TP2", "r");
     if (fp == nullptr)
@@ -1094,7 +988,39 @@ bool AlviumSyncCapture::getGNSSTriggerFrequency(int &frequency)
 
 int main(int argc, const char **argv)
 {
-    AlviumSyncCapture alviumSyncCapture;
-    alviumSyncCapture.run();
+    bool polariser;
+    std::string cameraName;
+
+    argparse::ArgumentParser parser("AlviumSyncDetect");
+    parser.add_argument("--cameraName")
+        .help("Name of Camera to connect to. If not used, will attempt to connect to first detected camera");
+    parser.add_argument("--polarimetric")
+        .flag()
+        .help("Use this flag if the camera is a polarimetric camera based off the IMX250MZR");
+    parser.add_argument("--listCameras")
+        .flag()
+        .help("Lists all connected cameras and exits");
+    parser.parse_args(argc, argv);
+
+    if (true == parser.is_used("listCameras"))
+    {
+        std::cout << "Listing Cameras" << std::endl;
+        AlliedVisionAlvium cameras;
+        std::vector<std::string> userIds = cameras.getUserIds();
+        for (auto userId : userIds)
+        {
+            std::cout << userId << std::endl;
+        }
+        return 1;
+    }
+
+    if (true == parser.is_used("cameraName"))
+    {
+        cameraName = parser.get<std::string>("cameraName");
+    }
+    polariser = parser.is_used("polarimetric");
+
+    AlviumSyncDetect AlviumSyncDetect;
+    AlviumSyncDetect.run(cameraName, polariser);
     return 1;
 }
