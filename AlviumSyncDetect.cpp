@@ -402,6 +402,7 @@ void AlviumSyncDetect::run(
     std::string name = "",
     bool polarimetricFlag = false)
 {
+    polariserMode = polarimetricFlag;
     gnss.start(
         [this](
             double latitude,
@@ -486,9 +487,9 @@ void AlviumSyncDetect::run(
         });
 
     std::thread imagePreviewThread(
-        [this, polarimetricFlag]
+        [this]
         {
-            if (false == polarimetricFlag)
+            if (false == this->polariserMode)
             {
                 ImagePreviewWindow imagePreview("Image Preview");
                 imagePreview.setSize(800, 600);
@@ -1143,6 +1144,9 @@ void AlviumSyncDetect::newInputStackCallback(
 
                 this->detectionCount++;
                 this->screen.detectionWindow->detectionCount->setValue(this->detectionCount);
+
+                ImagePreviewWindow detection("Detection " + std::to_string(this->detectionCount));
+                detection.setImageStreched(this->detectionStack, 1);
                 /* Reset the tail frame count for the next detection */
 
                 if (this->isSavingEnabled.load())
@@ -1382,6 +1386,44 @@ void AlviumSyncDetect::writeDetectionToFile(AlviumSyncDetect *app)
     }
 
     detectionFits.closeFITS();
+
+    // if (true == app->polariserMode)
+    // {
+    //     PolCam polCam;
+
+    //     cv::Mat pol0;
+    //     cv::Mat pol45;
+    //     cv::Mat pol90;
+    //     cv::Mat pol135;
+    //     cv::Mat intensity;
+    //     cv::Mat polarisationDegree;
+    //     cv::Mat polarisationAngle;
+
+    //     polCam.getPolarisation(
+    //         frame,
+    //         pol0,
+    //         pol45,
+    //         pol90,
+    //         pol135,
+    //         intensity,
+    //         polarisationDegree,
+    //         polarisationAngle);
+
+    //     cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
+    //     polarisationDegree.convertTo(
+    //         polarisationDegree,
+    //         CV_8UC3);
+    //     cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
+    //     PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+
+    //     cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
+    //     polarisationAngle.convertTo(
+    //         polarisationAngle,
+    //         CV_8UC3);
+    //     cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
+    //     PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
+    // }
+
     app->detectionImages.clear();
     app->detectionStack.release();
 

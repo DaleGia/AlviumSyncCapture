@@ -58,6 +58,8 @@ private:
     std::atomic<bool>
         exitFlag = false;
 
+    bool polariserMode = false;
+
     std::atomic<bool> isImageReceptionEnabled = false;
     std::atomic<bool> isSavingEnabled = false;
 
