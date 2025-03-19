@@ -5,8 +5,10 @@ endif(COMMAND cmake_policy)
 include(CMakePrintHelpers)
 
 project(AlviumSyncCapture LANGUAGES CXX)
-set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17 -O2")
-# set(CMAKE_BUILD_TYPE Debug)
+
+# set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17 -O2")
+set (CMAKE_CXX_FLAGS "-lstdc++fs -std=c++17")
+set(CMAKE_BUILD_TYPE Debug)
 
 # Add source files for executable 1
 set(AlviumSyncCapture_SOURCES
@@ -25,6 +27,9 @@ set(AlviumSyncDetect_SOURCES
     AlliedVisionAlvium/AlliedVisionAlviumPPSSync.cpp
     AlliedVisionAlvium/PPSSync.cpp
     AlliedVisionAlvium/GNSS.cpp
+    ImageTransientDetection/ImageTransientDetection.cpp
+    ImageTransientDetection/StackedImage.cpp
+    ImageTransientDetection/BrightObjectMasking.cpp
     PolCam.cpp)
 add_executable(AlviumSyncDetect ${AlviumSyncDetect_SOURCES})
 

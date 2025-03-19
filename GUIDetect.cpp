@@ -58,12 +58,12 @@ GUIDetect::GUIDetect()
         new nanogui::Screen(
             Eigen::Vector2i(
                 250,
-                300),
+                600),
             "Detection Control");
 
     detectionWindow = new GUIDetectionWindow(
         detectionScreen,
-        300,
+        600,
         250,
         0,
         0);

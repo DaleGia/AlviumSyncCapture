@@ -219,7 +219,7 @@ void AlviumSyncCapture::run(
                     else if (false ==
                              singleFits.addKey2FITS(
                                  "systemImageReceptionTimestampUTC",
-                                 (frame.systemImageReceivedTimestampSec * 1000000000) + frame.systemImageReceivedTimestampNSec))
+                                 frame.systemImageReceivedTimestamp))
                     {
                         std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
                     }
@@ -614,9 +614,6 @@ void AlviumSyncCapture::frameReceviedFunction(
 
     if (self->isSavingEnabled.load())
     {
-        std::tm *tmutc = std::gmtime(&frameData.systemImageReceivedTimestampSec);
-        time_t systemTimestamp = std::mktime(tmutc) + frameData.systemImageReceivedTimestampNSec;
-
         if (false == self->fits.addMat2FITS(frameData.image))
         {
             std::cerr << "Could not add image to fits file " << std::endl;
@@ -645,7 +642,7 @@ void AlviumSyncCapture::frameReceviedFunction(
         {
             std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", frameData.systemImageReceivedTimestampNSec))
+        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", frameData.systemImageReceivedTimestamp))
         {
             std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
         }
