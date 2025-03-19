@@ -10,3 +10,9 @@
 [submodule "argparse"]
 	path = argparse
 	url = https://github.com/DaleGia/argparse.git
+[submodule "RingBuffer"]
+	path = RingBuffer
+	url = https://github.com/DaleGia/RingBuffer.git
+[submodule "ImageTransientDetection"]
+	path = ImageTransientDetection
+	url = https://github.com/DaleGia/ImageTransientDetection.git

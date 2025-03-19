@@ -1,5 +1,5 @@
 /**
- * @file GUIControl.cpp
+ * @file GUIDetect.cpp
  * Copyright (c) 2024 Dale Giancono All rights reserved.
  *
  * @brief
@@ -8,7 +8,7 @@
 /*****************************************************************************/
 /*INLCUDES                                                                   */
 /*****************************************************************************/
-#include "GUIControl.hpp"
+#include "GUIDetect.hpp"
 #include <thread>
 
 /**************************s***************************************************/
@@ -18,7 +18,7 @@
 /*****************************************************************************/
 /* CLASS DECLARATION                                                                      */
 /*****************************************************************************/
-GUIControl::GUIControl()
+GUIDetect::GUIDetect()
 {
     /*
     So what do we want to do? We want to have a welcome screen saying please
@@ -28,34 +28,51 @@ GUIControl::GUIControl()
     */
     nanogui::init();
 
-    controlScreen =
+    screen =
         new nanogui::Screen(
             Eigen::Vector2i(
                 600,
                 925),
-            "AlviumSyncDetect");
+            "AlviumSyncCapture");
 
     capture =
         new GUICaptureWindow(
-            controlScreen,
+            screen,
             250,
             600,
             0,
             0);
 
     cameraWindow =
-        new GUICameraWindow(controlScreen, 350, 600, 0, 250);
+        new GUICameraWindow(screen, 350, 600, 0, 250);
 
     gnssWindow =
-        new GUIGNSSWindow(controlScreen, 325, 600, 0, 600);
+        new GUIGNSSWindow(screen, 325, 600, 0, 600);
     this->capture->setVisible(true);
     this->cameraWindow->setVisible(true);
     this->gnssWindow->setVisible(true);
-    controlScreen->setVisible(true);
-    controlScreen->performLayout();
+    screen->setVisible(true);
+    screen->performLayout();
+
+    detectionScreen =
+        new nanogui::Screen(
+            Eigen::Vector2i(
+                250,
+                600),
+            "Detection Control");
+
+    detectionWindow = new GUIDetectionWindow(
+        detectionScreen,
+        600,
+        250,
+        0,
+        0);
+
+    detectionScreen->setVisible(true);
+    detectionScreen->performLayout();
 }
 
-void GUIControl::start()
+void GUIDetect::start()
 {
     nanogui::mainloop();
     nanogui::shutdown();

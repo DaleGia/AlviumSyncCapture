@@ -59,12 +59,6 @@ public:
         previewStretchSlider = new nanogui::Slider(this);
         previewStretchSlider->setRange(std::pair<float, float>(0.01, 1));
         previewStretchSlider->setValue(1);
-        new nanogui::Label(this, "External Triggering:", "sans-bold");
-        this->externalButton = new nanogui::Button(
-            this,
-            "Enable External Triggering");
-        this->externalButton->setBackgroundColor(
-            GREEN);
     };
 
     nanogui::TextBox *pixelFormat = nullptr;
@@ -76,11 +70,6 @@ public:
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::FloatBox<double> *temperatureValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;
-
-    nanogui::Button *externalButton;
-
-    const nanogui::Color GREEN = nanogui::Color(50, 255, 50, 100);
-    const nanogui::Color RED = nanogui::Color(255, 50, 50, 100);
 
 private:
 };

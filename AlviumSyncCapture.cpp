@@ -58,17 +58,6 @@ void AlviumSyncCapture::run(
             this->controlScreen.gnssWindow->TimeUTCBox->setValue(ss.str());
         });
 
-    int frequency;
-    if (true == getGNSSTriggerFrequency(frequency))
-    {
-        this->triggerFrequency.store(frequency);
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(frequency);
-    }
-    else
-    {
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(0);
-    }
-
     /* Try to connect to a camera. Fail if you cannot */
     if ("" == name)
     {
@@ -230,7 +219,7 @@ void AlviumSyncCapture::run(
                     else if (false ==
                              singleFits.addKey2FITS(
                                  "systemImageReceptionTimestampUTC",
-                                 (frame.systemImageReceivedTimestampSec * 1000000000) + frame.systemImageReceivedTimestampNSec))
+                                 frame.systemImageReceivedTimestamp))
                     {
                         std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
                     }
@@ -299,20 +288,6 @@ void AlviumSyncCapture::run(
             else
             {
                 this->stopImageSaving();
-            }
-        });
-
-    /* Set what happens when the recording button is pushed */
-    controlScreen.cameraWindow->externalButton->setCallback(
-        [this]
-        {
-            if (false == this->isGNSSTriggeringEnabled.load())
-            {
-                this->enableExternalTriggering();
-            }
-            else
-            {
-                this->disableExternalTriggering();
             }
         });
 
@@ -455,24 +430,6 @@ void AlviumSyncCapture::run(
             return true;
         });
 
-    controlScreen.gnssWindow->triggerFrequencyBox->setCallback(
-        [this](uint32_t value)
-        {
-            int retFrequency;
-            if (false == this->setGNSSTriggerFrequency(value))
-            {
-                this->triggerFrequency.store(0);
-                return false;
-            }
-            else if (true == this->getGNSSTriggerFrequency(retFrequency))
-            {
-                this->triggerFrequency.store(retFrequency);
-                this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(retFrequency);
-            }
-
-            return true;
-        });
-
     std::thread temperatureThread(
         [this]
         {
@@ -538,6 +495,11 @@ void AlviumSyncCapture::run(
             else
             {
                 ImagePreviewWindow imagePreview("Image");
+                ImagePreviewWindow pol0Preview("Pol0");
+                ImagePreviewWindow pol45Preview("Pol45");
+                ImagePreviewWindow pol90Preview("Pol90");
+                ImagePreviewWindow pol135Preview("Pol135");
+
                 ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
                 ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
 
@@ -574,6 +536,10 @@ void AlviumSyncCapture::run(
                             polarisationAngle);
 
                         imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        pol0Preview.setImageStreched(pol0, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        pol45Preview.setImageStreched(pol45, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        pol90Preview.setImageStreched(pol90, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        pol135Preview.setImageStreched(pol135, this->controlScreen.cameraWindow->previewStretchSlider->value());
 
                         cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
                         polarisationDegree.convertTo(
@@ -648,9 +614,6 @@ void AlviumSyncCapture::frameReceviedFunction(
 
     if (self->isSavingEnabled.load())
     {
-        std::tm *tmutc = std::gmtime(&frameData.systemImageReceivedTimestampSec);
-        time_t systemTimestamp = std::mktime(tmutc) + frameData.systemImageReceivedTimestampNSec;
-
         if (false == self->fits.addMat2FITS(frameData.image))
         {
             std::cerr << "Could not add image to fits file " << std::endl;
@@ -679,7 +642,7 @@ void AlviumSyncCapture::frameReceviedFunction(
         {
             std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
         }
-        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", frameData.systemImageReceivedTimestampNSec))
+        else if (false == self->fits.addKey2FITS("systemImageReceptionTimestampUTC", frameData.systemImageReceivedTimestamp))
         {
             std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
         }
@@ -948,19 +911,8 @@ bool AlviumSyncCapture::enableExternalTriggering(void)
         /* If we are here the camera is configured.*/
 
         this->isGNSSTriggeringEnabled.store(true);
-        controlScreen.cameraWindow->externalButton->setCaption("Disable Triggering");
-        controlScreen.cameraWindow->externalButton->setBackgroundColor(
-            controlScreen.cameraWindow->RED);
-
-        this->controlScreen.screen->performLayout();
+        this->controlScreen.controlScreen->performLayout();
         std::cout << "Triggering enabled... " << std::endl;
-    }
-
-    int frequency;
-    if (true == this->getGNSSTriggerFrequency(frequency))
-    {
-        this->triggerFrequency.store(frequency);
-        this->controlScreen.gnssWindow->triggerFrequencyBox->setValue(frequency);
     }
 
     this->controlScreen.cameraWindow->calculatedFPS->setValue("");
@@ -1001,11 +953,7 @@ bool AlviumSyncCapture::disableExternalTriggering(void)
         /* If we are here the camera is configured.*/
     }
     this->isGNSSTriggeringEnabled.store(false);
-
-    controlScreen.cameraWindow->externalButton->setCaption("Enable Triggering");
-    controlScreen.cameraWindow->externalButton->setBackgroundColor(
-        controlScreen.cameraWindow->GREEN);
-    this->controlScreen.screen->performLayout();
+    this->controlScreen.controlScreen->performLayout();
     std::cout << "Triggering Disabled... " << std::endl;
 
     updateCameraCapture();
