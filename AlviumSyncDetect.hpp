@@ -55,6 +55,8 @@ private:
 
     ImageTransientDetection imageTransientDetection;
 
+    std::mutex lastRecievedImageMutex;
+    cv::Mat lastRecievedImage;
     std::atomic<bool>
         exitFlag = false;
 
@@ -92,6 +94,7 @@ private:
     BrightObjectMasking brightObjectMasking;
     StackedImage brightObjectInputStack;
     cv::Mat brightObjectMask;
+    std::mutex brightObjectMaskmageMutex;
 
     std::vector<AlliedVisionAlviumPPSSynchronisedFrameData> detectionImages;
     std::unique_ptr<RingBuffer<AlliedVisionAlviumPPSSynchronisedFrameData>>

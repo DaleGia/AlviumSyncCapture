@@ -474,8 +474,7 @@ void AlviumSyncCapture::run(
         {
             if (false == polarimetricFlag)
             {
-                ImagePreviewWindow imagePreview("Image Preview");
-                imagePreview.setSize(800, 600);
+                ImagePreviewWindow imagePreview("Image Preview", 800, 600);
 
                 while (!exitFlag.load())
                 {
@@ -494,18 +493,11 @@ void AlviumSyncCapture::run(
             }
             else
             {
-                ImagePreviewWindow imagePreview("Image");
-                ImagePreviewWindow pol0Preview("Pol0");
-                ImagePreviewWindow pol45Preview("Pol45");
-                ImagePreviewWindow pol90Preview("Pol90");
-                ImagePreviewWindow pol135Preview("Pol135");
+                ImagePreviewWindow imagePreview("Image", 800, 600);
 
-                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
-                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
+                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree", 800, 600);
+                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle", 800, 600);
 
-                imagePreview.setSize(600, 400);
-                PolarisationDegreePreview.setSize(600, 400);
-                PolarisationAnglePreview.setSize(600, 400);
                 PolCam polCam;
 
                 while (!exitFlag.load())
@@ -536,23 +528,8 @@ void AlviumSyncCapture::run(
                             polarisationAngle);
 
                         imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
-                        pol0Preview.setImageStreched(pol0, this->controlScreen.cameraWindow->previewStretchSlider->value());
-                        pol45Preview.setImageStreched(pol45, this->controlScreen.cameraWindow->previewStretchSlider->value());
-                        pol90Preview.setImageStreched(pol90, this->controlScreen.cameraWindow->previewStretchSlider->value());
-                        pol135Preview.setImageStreched(pol135, this->controlScreen.cameraWindow->previewStretchSlider->value());
 
-                        cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
-                        polarisationDegree.convertTo(
-                            polarisationDegree,
-                            CV_8UC3);
-                        cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
                         PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
-
-                        cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
-                        polarisationAngle.convertTo(
-                            polarisationAngle,
-                            CV_8UC3);
-                        cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
                         PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
 
                         this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);

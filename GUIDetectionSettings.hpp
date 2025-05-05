@@ -17,18 +17,13 @@ public:
 
         this->setLayout(new nanogui::GroupLayout());
 
-        new nanogui::Label(this, "Detection Stack Size:", "sans-bold");
-        this->detectionStackSize = new nanogui::IntBox<int>(this, 1);
-        this->detectionStackSize->setMinValue(1);
+        new nanogui::Label(this, "Detection Stack Size (ms):", "sans-bold");
+        this->detectionStackSize = new nanogui::IntBox<int>(this, 1000);
+        this->detectionStackSize->setMinValue(100);
         this->detectionStackSize->setEditable(true);
 
-        new nanogui::Label(this, "Detection Downsampling Factor:", "sans-bold");
-        this->detectionDownsamplingFactor = new nanogui::IntBox<int>(this, 1);
-        this->detectionDownsamplingFactor->setMinValue(1);
-        this->detectionDownsamplingFactor->setEditable(true);
-
         new nanogui::Label(this, "Pre/Post Detection Buffer Size:", "sans-bold");
-        this->prePostDetectionImages = new nanogui::IntBox<int>(this, 10);
+        this->prePostDetectionImages = new nanogui::IntBox<int>(this, 1);
         this->prePostDetectionImages->setMinValue(1);
         this->prePostDetectionImages->setEditable(true);
 
@@ -55,7 +50,6 @@ public:
     };
 
     nanogui::IntBox<int> *detectionStackSize = nullptr;
-    nanogui::IntBox<int> *detectionDownsamplingFactor = nullptr;
     nanogui::IntBox<int> *prePostDetectionImages = nullptr;
     nanogui::IntBox<int> *detectionMinSize = nullptr;
     nanogui::IntBox<int> *detectionMaxSize = nullptr;

@@ -23,13 +23,7 @@
 /*****************************************************************************/
 AlviumSyncDetect::AlviumSyncDetect()
 {
-    this->detectionInputStack.setNewStackCallback(
-        [this](cv::Mat image, double brightnessFactor)
-        {
-            this->newInputStackCallback(image, brightnessFactor);
-        });
-
-    this->imageTransientDetection.setDebugMode(true);
+    this->imageTransientDetection.setDebugMode(false);
 
     /* Set what happens when the acquise image button is pushed */
     this->screen.capture->acquireButton->setCallback(
@@ -70,7 +64,7 @@ AlviumSyncDetect::AlviumSyncDetect()
                                 ACQUIRESINGLEIMAGETIMEOUT_MS))
                 {
                     std::cout << "Got Image" << std::endl;
-                    ImagePreviewWindow singleFrame("Single Image");
+                    ImagePreviewWindow singleFrame("Single Image", 800, 600);
                     try
                     {
                         singleFrame.setImageStreched(frame.image, this->screen.cameraWindow->previewStretchSlider->value());
@@ -346,12 +340,6 @@ AlviumSyncDetect::AlviumSyncDetect()
             return true;
         });
 
-    screen.detectionWindow->detectionDownsamplingFactor->setCallback(
-        [this](int value)
-        {
-            this->detectionDownsampleFactor = value;
-        });
-
     screen.detectionWindow->detectionMaxSize->setCallback(
         [this](int value)
         {
@@ -373,7 +361,7 @@ AlviumSyncDetect::AlviumSyncDetect()
     screen.detectionWindow->detectionStackSize->setCallback(
         [this](int value)
         {
-            this->detectionInputStack.setStackAccumulatedExposure(value);
+            this->detectionInputStack.setStackAccumulatedExposure(value * 1000);
         });
 
     screen.detectionWindow->prePostDetectionImages->setCallback(
@@ -386,16 +374,33 @@ AlviumSyncDetect::AlviumSyncDetect()
         [this](bool value)
         {
             this->maskBrightObjects = value;
-            this->brightObjectInputStack.setStackAccumulatedExposure(5000000);
-            this->brightObjectMasking.setSigma(3);
-            this->brightObjectMasking.setDilationKernalSize(50);
-            this->brightObjectMasking.setErosionKernalSize(2);
-            this->brightObjectInputStack.setNewStackCallback(
-                [this](cv::Mat &image, double brightnessFactor)
-                {
-                    this->newBrightObjectStackCallback(image, brightnessFactor);
-                });
+            if (true == value)
+            {
+                this->brightObjectInputStack.setStackMode(StackedImage::ACCUMULATEDEXPOSURE);
+                this->brightObjectInputStack.setStackAccumulatedExposure(1000000);
+                this->brightObjectMasking.setSigma(3);
+                this->brightObjectMasking.setDilationKernalSize(50);
+                this->brightObjectMasking.setErosionKernalSize(2);
+                this->brightObjectInputStack.setNewStackCallback(
+                    [this](cv::Mat &image, double brightnessFactor)
+                    {
+                        this->newBrightObjectStackCallback(image, brightnessFactor);
+                    });
+            }
         });
+
+    this->detectionInputStack.setStackMode(
+        StackedImage::StackedImage::ACCUMULATEDEXPOSURE);
+    this->detectionInputStack.setNewStackCallback(
+        [this](cv::Mat image, double brightnessFactor)
+        {
+            this->newInputStackCallback(image, brightnessFactor);
+        });
+    this->detectionInputStack.setStackAccumulatedExposure(this->screen.detectionWindow->detectionStackSize->value() * 1000);
+    this->imageTransientDetection.setSigma(this->screen.detectionWindow->detectionSigma->value());
+    this->imageTransientDetection.setMaximumSize(this->screen.detectionWindow->detectionMaxSize->value());
+    this->imageTransientDetection.setMinimumSize(this->screen.detectionWindow->detectionMinSize->value());
+    this->imageTransientDetection.setDebugMode(true);
 };
 
 void AlviumSyncDetect::run(
@@ -491,12 +496,28 @@ void AlviumSyncDetect::run(
         {
             if (false == this->polariserMode)
             {
-                ImagePreviewWindow imagePreview("Image Preview");
-                imagePreview.setSize(800, 600);
+                ImagePreviewWindow imagePreview("Image Preview", 800, 600);
 
                 while (!exitFlag.load())
                 {
                     cv::Mat frame;
+                    cv::Mat mask;
+                    this->lastRecievedImageMutex.lock();
+                    frame = this->lastRecievedImage.clone();
+                    this->lastRecievedImageMutex.unlock();
+                    if (this->maskBrightObjects)
+                    {
+                        this->brightObjectMaskmageMutex.lock();
+                        mask = this->brightObjectMask.clone();
+                        this->brightObjectMaskmageMutex.unlock();
+                        cv::Mat maskedFrame;
+
+                        if (false == mask.empty())
+                        {
+                            frame.copyTo(maskedFrame, mask);
+                            frame = maskedFrame;
+                        }
+                    }
 
                     if (false == frame.empty())
                     {
@@ -504,76 +525,56 @@ void AlviumSyncDetect::run(
                         this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                         this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                     }
-                    cv::waitKey(1);
                     usleep(100000);
                 }
             }
             else
             {
-                ImagePreviewWindow imagePreview("Image");
-                // ImagePreviewWindow pol0Preview("Pol0");
-                // ImagePreviewWindow pol45Preview("Pol45");
-                // ImagePreviewWindow pol90Preview("Pol90");
-                // ImagePreviewWindow pol135Preview("Pol135");
+                ImagePreviewWindow imagePreview("Image", 800, 600);
 
-                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree");
-                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle");
+                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree", 800, 600);
+                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle", 800, 600);
 
-                imagePreview.setSize(600, 400);
-                PolarisationDegreePreview.setSize(600, 400);
-                PolarisationAnglePreview.setSize(600, 400);
                 PolCam polCam;
 
                 while (!exitFlag.load())
                 {
-                    cv::Mat frame;
-
-                    if (false == frame.empty())
                     {
-                        cv::Mat pol0;
-                        cv::Mat pol45;
-                        cv::Mat pol90;
-                        cv::Mat pol135;
-                        cv::Mat intensity;
-                        cv::Mat polarisationDegree;
-                        cv::Mat polarisationAngle;
+                        cv::Mat frame;
+                        this->lastRecievedImageMutex.lock();
+                        frame = this->lastRecievedImage.clone();
+                        this->lastRecievedImageMutex.unlock();
 
-                        polCam.getPolarisation(
-                            frame,
-                            pol0,
-                            pol45,
-                            pol90,
-                            pol135,
-                            intensity,
-                            polarisationDegree,
-                            polarisationAngle);
+                        if (false == frame.empty())
+                        {
+                            cv::Mat pol0;
+                            cv::Mat pol45;
+                            cv::Mat pol90;
+                            cv::Mat pol135;
+                            cv::Mat intensity;
+                            cv::Mat polarisationDegree;
+                            cv::Mat polarisationAngle;
 
-                        imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
-                        // pol0Preview.setImageStreched(pol0, this->screen.cameraWindow->previewStretchSlider->value());
-                        // pol45Preview.setImageStreched(pol45, this->screen.cameraWindow->previewStretchSlider->value());
-                        // pol90Preview.setImageStreched(pol90, this->screen.cameraWindow->previewStretchSlider->value());
-                        // pol135Preview.setImageStreched(pol135, this->screen.cameraWindow->previewStretchSlider->value());
+                            polCam.getPolarisation(
+                                frame,
+                                pol0,
+                                pol45,
+                                pol90,
+                                pol135,
+                                intensity,
+                                polarisationDegree,
+                                polarisationAngle);
 
-                        cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
-                        polarisationDegree.convertTo(
-                            polarisationDegree,
-                            CV_8UC3);
-                        cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
-                        PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+                            imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
 
-                        cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
-                        polarisationAngle.convertTo(
-                            polarisationAngle,
-                            CV_8UC3);
-                        cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
-                        PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
+                            PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+                            PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
 
-                        this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
-                        this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
+                            this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
+                            this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
+                        }
+                        usleep(100000);
                     }
-                    cv::waitKey(1);
-
-                    usleep(100000);
                 }
             }
         });
@@ -589,6 +590,9 @@ void AlviumSyncDetect::frameReceviedFunction(
     AlviumSyncDetect *self = (AlviumSyncDetect *)arg;
 
     self->receivedFramesCount++;
+    self->lastRecievedImageMutex.lock();
+    self->lastRecievedImage = frameData.image.clone();
+    self->lastRecievedImageMutex.unlock();
 
     /* This makes sure there are images saved before and after detections */
     if (true == self->detectionActiveFlag)
@@ -615,10 +619,13 @@ void AlviumSyncDetect::frameReceviedFunction(
         self->detectionImagesLock.unlock();
     }
 
-    self->brightObjectInputStack.add(
-        frameData.image,
-        frameData.exposureTimeUs,
-        gain);
+    if (self->maskBrightObjects)
+    {
+        self->brightObjectInputStack.add(
+            frameData.image,
+            frameData.exposureTimeUs,
+            gain);
+    }
 }
 
 void AlviumSyncDetect::updateCameraCapture(void)
@@ -995,6 +1002,10 @@ void AlviumSyncDetect::newInputStackCallback(
     cv::Mat frameB;
     cv::Mat finalA;
     cv::Mat finalB;
+    cv::Mat mask;
+    brightObjectMaskmageMutex.lock();
+    mask = this->brightObjectMask.clone();
+    brightObjectMaskmageMutex.unlock();
 
     /* Get the last input and see if it has been set yet*/
     if (true == this->previousInputStack.empty())
@@ -1004,75 +1015,24 @@ void AlviumSyncDetect::newInputStackCallback(
         return;
     }
 
-    if (true == this->brightObjectMask.empty() &&
+    if (true == mask.empty() &&
         true == this->maskBrightObjects)
     {
         /* Wait for the bright object mask to be ready */
         return;
     }
 
-    /* If the downsample Factor has been set, downsample the mask and images */
-    if (1U < this->detectionDownsampleFactor)
-    {
-        int newWidth = stack.size().width / this->detectionDownsampleFactor;
-        int newHeight = stack.size().height / this->detectionDownsampleFactor;
-        /* Downsample the stack and the previous stack*/
-        /* They should be the same size otherwise bad things are going to happen */
-        try
-        {
-            cv::resize(
-                stack,
-                frameA,
-                cv::Size(newWidth, newHeight),
-                0,
-                0,
-                cv::INTER_NEAREST);
-
-            cv::resize(
-                this->previousInputStack,
-                frameB,
-                cv::Size(newWidth, newHeight),
-                0,
-                0,
-                cv::INTER_NEAREST);
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << e.what() << '\n';
-        }
-        /* Now downsample the combined mask */
-        if (false == this->brightObjectMask.empty())
-        {
-            try
-            {
-                cv::resize(
-                    this->brightObjectMask,
-                    this->brightObjectMask,
-                    cv::Size(newWidth, newHeight),
-                    0,
-                    0,
-                    cv::INTER_NEAREST);
-            }
-            catch (const std::exception &e)
-            {
-                std::cerr << e.what() << '\n';
-            }
-        }
-    }
-    else
-    {
-        /* If there is not any downsampling, just carry on */
-        frameA = stack;
-        frameB = this->previousInputStack;
-    }
+    /* If there is not any downsampling, just carry on */
+    frameA = stack;
+    frameB = this->previousInputStack;
 
     /* Apply the combined mask */
-    if (false == brightObjectMask.empty())
+    if (false == mask.empty())
     {
         try
         {
-            frameA.copyTo(finalA, brightObjectMask);
-            frameB.copyTo(finalB, brightObjectMask);
+            frameA.copyTo(finalA, mask);
+            frameB.copyTo(finalB, mask);
         }
         catch (const std::exception &e)
         {
@@ -1113,9 +1073,9 @@ void AlviumSyncDetect::newInputStackCallback(
         {
             /* If a detection is still going, reset the detectiontail count and add to */
             /* the detection stack image */
-            cv::Mat diff;
-            cv::absdiff(frameA, frameB, diff);
-            cv::accumulate(diff, this->detectionStack);
+            // cv::Mat diff;
+            // cv::absdiff(frameA, frameB, diff);
+            cv::accumulate(stack, this->detectionStack);
         }
     }
     /* If it is not true, check if the tail count exceeds a certain value*/
@@ -1145,7 +1105,7 @@ void AlviumSyncDetect::newInputStackCallback(
                 this->detectionCount++;
                 this->screen.detectionWindow->detectionCount->setValue(this->detectionCount);
 
-                ImagePreviewWindow detection("Detection " + std::to_string(this->detectionCount));
+                ImagePreviewWindow detection("Detection " + std::to_string(this->detectionCount), 800, 600);
                 detection.setImageStreched(this->detectionStack, 1);
                 /* Reset the tail frame count for the next detection */
 
@@ -1153,17 +1113,13 @@ void AlviumSyncDetect::newInputStackCallback(
                 {
                     /* This goes in the callback function in the initialise function */
 
-                    // writeDetectionToFile(
-                    //     this->detectionImages,
-                    //     this->detectionStack,
-                    //     this->detectionStartTime,
-                    //     this->detectionEndTime,
-                    //     this);
-
-                    std::thread writeDetectionThread(
-                        writeDetectionToFile,
+                    writeDetectionToFile(
                         this);
-                    writeDetectionThread.detach();
+
+                    // std::thread writeDetectionThread(
+                    //     writeDetectionToFile,
+                    //     this);
+                    // writeDetectionThread.detach();
                 }
 
                 this->detectionInputStack.reset();
@@ -1182,8 +1138,10 @@ void AlviumSyncDetect::newBrightObjectStackCallback(
     double brightnessFactor)
 {
     /* Initalise the detection mask */
+    this->brightObjectMaskmageMutex.lock();
     this->brightObjectMask = cv::Mat::zeros(stack.size(), CV_8U);
     this->brightObjectMask = this->brightObjectMasking.getMask(stack);
+    this->brightObjectMaskmageMutex.unlock();
 }
 
 bool AlviumSyncDetect::startDetection()
@@ -1207,21 +1165,6 @@ bool AlviumSyncDetect::startDetection()
     if (true == this->detectionBoundingBox.empty())
     {
         std::cerr << "Detection Bounding Box is empty" << std::endl;
-    }
-    else if (1 < this->detectionDownsampleFactor)
-    {
-        int originalX = static_cast<int>(
-            this->detectionBoundingBox.x * this->detectionDownsampleFactor);
-        int originalY = static_cast<int>(
-            this->detectionBoundingBox.y * this->detectionDownsampleFactor);
-
-        int originalWidth = static_cast<int>(
-            this->detectionBoundingBox.width * this->detectionDownsampleFactor);
-        int originalHeight = static_cast<int>(
-            this->detectionBoundingBox.height * this->detectionDownsampleFactor);
-
-        this->convertedDetectionBoundingBox =
-            cv::Rect(originalX, originalY, originalWidth, originalHeight);
     }
     else
     {
