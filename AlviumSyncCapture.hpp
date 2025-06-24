@@ -17,6 +17,7 @@
 #include "AlliedVisionAlvium/GNSS.hpp"
 #include "AlliedVisionAlvium/AlliedVisionAlvium.hpp"
 #include "ImageTransientDetection/ImagePreviewWindow.hpp"
+#include "ImageTransientDetection/StackedImage.hpp"
 #include "OpenCVFITS/OpenCVFITS.hpp"
 #include <opencv2/opencv.hpp>
 #include "AlliedVisionAlvium/PPSSync.hpp"
@@ -57,6 +58,10 @@ private:
     std::atomic<bool> isSavingEnabled = false;
     std::atomic<bool> isGNSSTriggeringEnabled = false;
 
+    bool stackEnabled = false;
+    StackedImage stack;
+    cv::Mat oldStack;
+    double oldBrightnessFactor;
     uint64_t receivedFramesCount = 0;
     uint64_t savedFramesCount = 0;
     std::string currentRootSavePath;

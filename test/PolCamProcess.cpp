@@ -5,11 +5,11 @@
 
 int main(int argc, char **argv)
 {
-    std::cout << "Hi!" << std::endl;
-    if (argc != 2)
+    bool filtersFlags = false;
+    if (argc > 2 && argv[2][0] == '-' && argv[2][1] == 'p')
     {
-        std::cerr << "Usage: " << argv[0] << " <filepath>" << std::endl;
-        return 1;
+        std::cout << "PolCamProcess: processing all polarisation files" << std::endl;
+        filtersFlags = true;
     }
 
     OpenCVFITS pol0Fits;
@@ -28,25 +28,29 @@ int main(int argc, char **argv)
     std::string degreeFilepath = argv[1] + std::string("degree.fits");
     std::string angleFilepath = argv[1] + std::string("angle.fits");
 
-    if (false == pol0Fits.createFITS(pol0Filepath, true))
+    if (filtersFlags == true)
     {
-        std::cerr << "Failed to create FITS file: " << pol0Filepath << std::endl;
-        return 1;
-    }
-    if (false == pol45Fits.createFITS(pol45Filepath, true))
-    {
-        std::cerr << "Failed to create FITS file: " << pol45Filepath << std::endl;
-        return 1;
-    }
-    if (false == pol90Fits.createFITS(pol90Filepath, true))
-    {
-        std::cerr << "Failed to create FITS file: " << pol90Filepath << std::endl;
-        return 1;
-    }
-    if (false == pol135Fits.createFITS(pol135Filepath, true))
-    {
-        std::cerr << "Failed to create FITS file: " << pol135Filepath << std::endl;
-        return 1;
+
+        if (false == pol0Fits.createFITS(pol0Filepath, true))
+        {
+            std::cerr << "Failed to create FITS file: " << pol0Filepath << std::endl;
+            return 1;
+        }
+        if (false == pol45Fits.createFITS(pol45Filepath, true))
+        {
+            std::cerr << "Failed to create FITS file: " << pol45Filepath << std::endl;
+            return 1;
+        }
+        if (false == pol90Fits.createFITS(pol90Filepath, true))
+        {
+            std::cerr << "Failed to create FITS file: " << pol90Filepath << std::endl;
+            return 1;
+        }
+        if (false == pol135Fits.createFITS(pol135Filepath, true))
+        {
+            std::cerr << "Failed to create FITS file: " << pol135Filepath << std::endl;
+            return 1;
+        }
     }
     if (false == intensityFits.createFITS(intensityFilepath, true))
     {
@@ -99,43 +103,72 @@ int main(int argc, char **argv)
         cv::Mat pol135;
         polcam.getPolarisation(image, pol0, pol45, pol90, pol135, I, P, D);
 
-        cv::Mat disp;
-        pol0Fits.addMat2FITS(pol0);
-        cv::normalize(pol0, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imshow("Polarisation 0", disp);
+        if (filtersFlags == true)
+        {
+            cv::Mat disp;
+            pol0Fits.addMat2FITS(pol0);
+            cv::normalize(pol0, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+            cv::imshow("Polarisation 0", disp);
 
-        pol45Fits.addMat2FITS(pol45);
-        cv::normalize(pol45, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imshow("Polarisation 45", disp);
+            pol45Fits.addMat2FITS(pol45);
+            cv::normalize(pol45, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+            cv::imshow("Polarisation 45", disp);
 
-        pol90Fits.addMat2FITS(pol90);
-        cv::normalize(pol90, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imshow("Polarisation 90", disp);
+            pol90Fits.addMat2FITS(pol90);
+            cv::normalize(pol90, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+            cv::imshow("Polarisation 90", disp);
 
-        pol135Fits.addMat2FITS(pol135);
-        cv::normalize(pol135, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imshow("Polarisation 135", disp);
+            pol135Fits.addMat2FITS(pol135);
+            cv::normalize(pol135, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
+            cv::imshow("Polarisation 135", disp);
+        }
+        double min, max;
+        std::stringstream ss;
 
-        cv::normalize(I, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::applyColorMap(disp, disp, cv::COLORMAP_JET);
-        intensityFits.addMat2FITS(disp);
-        cv::imshow("Intensity", disp);
+        cv::minMaxLoc(I, &min, &max);
+        ss.clear();
+        ss << "Intensity min: " << min << ", max: " << max;
+        // I.convertTo(I, CV_16U);
+        intensityFits.addMat2FITS(I);
+        cv::normalize(I, I, 0, 255, cv::NORM_MINMAX, CV_8U);
+        cv::imshow("Intensity", I);
+        cv::setWindowTitle("Intensity", ss.str());
 
-        cv::normalize(P, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::applyColorMap(disp, disp, cv::COLORMAP_JET);
-        degreeFits.addMat2FITS(disp);
-        cv::imshow("Polarisation Degree", disp);
+        cv::Mat P_converted;
+        P.convertTo(P_converted, CV_32F, 100.0 / 4096.0, 0);
+        cv::minMaxLoc(P_converted, &min, &max);
+        ss.str(std::string());
+        ss << "Degree min: " << min << ", max: " << max;
 
-        cv::normalize(D, disp, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::applyColorMap(disp, disp, cv::COLORMAP_JET);
-        cv::imshow("Polarisation Angle", disp);
-        angleFits.addMat2FITS(disp);
+        degreeFits.addMat2FITS(P_converted);
+
+        cv::Mat P_stretched;
+        cv::normalize(P_converted, P_stretched, 0, 255, cv::NORM_MINMAX, CV_8U);
+        cv::imshow("Polarisation Degree", P_stretched);
+        cv::setWindowTitle("Polarisation Degree", ss.str());
+        std::cout << "P converted: " << ss.str() << std::endl;
+
+        cv::minMaxLoc(D, &min, &max);
+        ss.str(std::string());
+        ss << "Angle min: " << min << ", max: " << max;
+        angleFits.addMat2FITS(D);
+        D.convertTo(D, CV_8U, 255.0 / 360.0, 180.0 / 360.0);
+        cv::imshow("Polarisation Angle", D);
+        cv::setWindowTitle("Polarisation Angle", ss.str());
+
         cv::waitKey(1);
     }
 
-    pol0Fits.closeFITS();
-    pol45Fits.closeFITS();
-    pol90Fits.closeFITS();
-    pol135Fits.closeFITS();
+    intensityFits.closeFITS();
+    degreeFits.closeFITS();
+    angleFits.closeFITS();
+
+    if (filtersFlags == true)
+    {
+        pol0Fits.closeFITS();
+        pol45Fits.closeFITS();
+        pol90Fits.closeFITS();
+        pol135Fits.closeFITS();
+    }
     return 0;
 }

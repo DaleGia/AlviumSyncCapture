@@ -131,36 +131,116 @@ void PolCam::getPolarisation(
     cv::Mat &pol45,
     cv::Mat &pol90,
     cv::Mat &pol135,
-    cv::Mat &I,
+    cv::Mat &Intensity,
     cv::Mat &P,
     cv::Mat &thetaDeg)
 {
-    cv::Mat Q;
-    cv::Mat U;
-    cv::Mat theta;
 
-    cv::Mat sum;
     cv::Mat squareRoot;
+
+    cv::Mat S0;
+    cv::Mat S0_2;
+
+    cv::Mat S1;
+    cv::Mat S1_2;
+
+    cv::Mat S2;
+    cv::Mat S2_2;
+
+    cv::Mat S3;
+
+    cv::Mat S1_2_plus_S2_2;
 
     getFilteredImages(image, pol0, pol45, pol90, pol135);
 
-    cv::subtract(pol0, pol90, Q, cv::noArray(), CV_32F);
+    // /* Calculates stokes parameters*/
+    cv::add(pol0, pol90, S0, cv::noArray(), CV_32F);
+    cv::subtract(pol0, pol90, S1, cv::noArray(), CV_32F);
+    cv::subtract(pol45, pol135, S2, cv::noArray(), CV_32F);
 
-    cv::subtract(pol45, pol135, U, cv::noArray(), CV_32F);
+    P = cv::Mat::zeros(S0.size(), CV_32F);
 
-    cv::add(pol0, pol45, I, cv::noArray(), CV_32F);
+    for (int y = 0; y < S0.rows; ++y)
+    {
+        for (int x = 0; x < S0.cols; ++x)
+        {
+            float s0 = S0.at<float>(y, x);
+            if (s0 == 0)
+            {
+                s0 = 1;
+            }
+            float s1 = S1.at<float>(y, x);
+            float s2 = S2.at<float>(y, x);
+            P.at<float>(y, x) = std::sqrt(s1 * s1 + s2 * s2) / (s0);
+            if (std::isnan(P.at<float>(y, x)))
+            {
+                P.at<float>(y, x) = 0;
+            }
+        }
+    }
 
-    cv::add(I, pol90, I, cv::noArray(), CV_32F);
+    thetaDeg = cv::Mat::zeros(S0.size(), CV_32F);
 
-    cv::add(I, pol135, I, cv::noArray(), CV_32F);
+    for (int y = 0; y < S1.rows; ++y)
+    {
+        for (int x = 0; x < S1.cols; ++x)
+        {
+            float s1 = S1.at<float>(y, x);
+            float s2 = S2.at<float>(y, x);
+            thetaDeg.at<float>(y, x) = std::atan2(s2, s1) * 180 / M_PI;
+        }
+    }
+    double min, max;
+    cv::minMaxLoc(S0, &min, &max);
+    std::cout << "S0 min: " << min << " max: " << max << std::endl;
+    cv::minMaxLoc(S1, &min, &max);
 
-    cv::add(Q.mul(Q, 2), U.mul(U, 2), sum);
+    std::cout << "S1 min: " << min << " max: " << max << std::endl;
+    cv::minMaxLoc(S2, &min, &max);
+    std::cout << "S2 min: " << min << " max: " << max << std::endl;
+    cv::minMaxLoc(P, &min, &max);
+    // Calculate and print the average intensity of S0
+    cv::Scalar mean = cv::mean(P);
+    std::cout
+        << "P min: " << min << " max: " << max << ", mean: " << mean[0] << std::endl
+        << std::endl;
+    cv::minMaxLoc(thetaDeg, &min, &max);
+    std::cout << "deg min: " << min << " max: " << max << std::endl
+              << std::endl;
 
-    cv::sqrt(Q.mul(Q, 2) + U.mul(U, 2), squareRoot);
+    /* Creates overall intensity */
+    cv::add(pol0, pol45, Intensity, cv::noArray(), CV_32F);
+    cv::add(Intensity, pol90, Intensity, cv::noArray(), CV_32F);
+    cv::add(Intensity, pol135, Intensity, cv::noArray(), CV_32F);
 
-    cv::divide(squareRoot, I, P);
+    // cv::Mat Q;
+    // cv::Mat Q_2;
+    // cv::Mat U;
+    // cv::Mat U_2;
+    // cv::Mat I;
+    // cv::Mat sum;
 
-    cv::phase(U, Q, thetaDeg, true);
+    // cv::add(pol0, pol90, I, cv::noArray(), CV_32F);
+    // cv::subtract(pol0, pol90, Q, cv::noArray(), CV_32F);
+    // cv::subtract(pol45, pol135, U, cv::noArray(), CV_32F);
+
+    // /* Get total intensity*/
+    // cv::add(pol0, pol45, Intensity, cv::noArray(), CV_32F);
+    // cv::add(Intensity, pol90, Intensity, cv::noArray(), CV_32F);
+    // cv::add(Intensity, pol135, Intensity, cv::noArray(), CV_32F);
+
+    // cv::multiply(Q, Q, Q_2);
+    // cv::multiply(U, U, U_2);
+
+    // cv::add(Q_2, U_2, sum);
+    // cv::sqrt(sum, squareRoot);
+
+    // I = I + 1;
+    // cv::divide(squareRoot, I, P);
+    // double min, max;
+    // cv::Scalar mean;
+    // cv::minMaxLoc(P, &min, &max);
+    // cv::phase(U, Q, thetaDeg, true);
 
     return;
 }

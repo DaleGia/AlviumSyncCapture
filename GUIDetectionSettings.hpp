@@ -17,13 +17,18 @@ public:
 
         this->setLayout(new nanogui::GroupLayout());
 
-        new nanogui::Label(this, "Detection Stack Size (ms):", "sans-bold");
+        new nanogui::Label(this, "Detection Stack Exposure (ms):", "sans-bold");
         this->detectionStackSize = new nanogui::IntBox<int>(this, 1000);
-        this->detectionStackSize->setMinValue(100);
+        this->detectionStackSize->setMinValue(250);
         this->detectionStackSize->setEditable(true);
 
+        new nanogui::Label(this, "Background Stack Exposure (ms):", "sans-bold");
+        this->backgroundStackSize = new nanogui::IntBox<int>(this, 1000);
+        this->backgroundStackSize->setMinValue(1000);
+        this->backgroundStackSize->setEditable(true);
+
         new nanogui::Label(this, "Pre/Post Detection Buffer Size:", "sans-bold");
-        this->prePostDetectionImages = new nanogui::IntBox<int>(this, 1);
+        this->prePostDetectionImages = new nanogui::IntBox<int>(this, 10);
         this->prePostDetectionImages->setMinValue(1);
         this->prePostDetectionImages->setEditable(true);
 
@@ -33,7 +38,7 @@ public:
         this->detectionSigma->setEditable(true);
 
         new nanogui::Label(this, "Detection Min Size:", "sans-bold");
-        this->detectionMinSize = new nanogui::IntBox<int>(this, 1);
+        this->detectionMinSize = new nanogui::IntBox<int>(this, 5);
         this->detectionMinSize->setMinValue(1);
         this->detectionMinSize->setEditable(true);
 
@@ -41,8 +46,12 @@ public:
         this->detectionMaxSize = new nanogui::IntBox<int>(this, 100);
         this->detectionMaxSize->setEditable(true);
 
-        new nanogui::Label(this, "Mask Bright Objects:", "sans-bold");
-        this->enableBrightMask = new nanogui::CheckBox(this, "Enable");
+        new nanogui::Label(this, "Detection Max Duration (S):", "sans-bold");
+        this->detectionMaxDuration = new nanogui::IntBox<int>(this, 10);
+        this->detectionMaxDuration->setEditable(true);
+
+        new nanogui::Label(this, "Enable Debug Windows:", "sans-bold");
+        this->enableDebug = new nanogui::CheckBox(this, "Enable");
 
         new nanogui::Label(this, "Detection Count:", "sans-bold");
         this->detectionCount = new nanogui::IntBox<int>(this, 0);
@@ -50,12 +59,13 @@ public:
     };
 
     nanogui::IntBox<int> *detectionStackSize = nullptr;
+    nanogui::IntBox<int> *backgroundStackSize = nullptr;
     nanogui::IntBox<int> *prePostDetectionImages = nullptr;
     nanogui::IntBox<int> *detectionMinSize = nullptr;
     nanogui::IntBox<int> *detectionMaxSize = nullptr;
+    nanogui::IntBox<int> *detectionMaxDuration = nullptr;
     nanogui::FloatBox<double> *detectionSigma = nullptr;
-
-    nanogui::CheckBox *enableBrightMask = nullptr;
+    nanogui::CheckBox *enableDebug = nullptr;
     nanogui::IntBox<int> *detectionCount = nullptr;
 
 private:

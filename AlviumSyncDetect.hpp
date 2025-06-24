@@ -21,8 +21,7 @@
 #include "ImageTransientDetection/ImageTransientDetection.hpp"
 #include "ImageTransientDetection/ImagePreviewWindow.hpp"
 #include "ImageTransientDetection/StackedImage.hpp"
-#include "ImageTransientDetection/BrightObjectMasking.hpp"
-
+#include "VideoTransientDetection.hpp"
 #include "AlliedVisionAlvium/PPSSync.hpp"
 #include "RingBuffer/RingBuffer.hpp"
 
@@ -46,14 +45,14 @@ public:
      * @brief
      *
      */
-    void run(std::string name, bool polarimetricFlag);
+    void run(std::string name);
 
 private:
     GUIDetect screen;
     AlliedVisionAlviumPPSSync camera;
     std::string cameraName;
 
-    ImageTransientDetection imageTransientDetection;
+    VideoTransientDetection videoTransientDetection;
 
     std::mutex lastRecievedImageMutex;
     cv::Mat lastRecievedImage;
@@ -89,12 +88,6 @@ private:
     cv::Mat previousInputStack;
     cv::Mat detectionStack;
     uint64_t detectionCount = 0;
-
-    bool maskBrightObjects = false;
-    BrightObjectMasking brightObjectMasking;
-    StackedImage brightObjectInputStack;
-    cv::Mat brightObjectMask;
-    std::mutex brightObjectMaskmageMutex;
 
     std::vector<AlliedVisionAlviumPPSSynchronisedFrameData> detectionImages;
     std::unique_ptr<RingBuffer<AlliedVisionAlviumPPSSynchronisedFrameData>>

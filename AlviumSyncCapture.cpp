@@ -9,6 +9,7 @@
 /*INLCUDES                                                                   */
 /*****************************************************************************/
 #include "AlviumSyncCapture.hpp"
+#include "GUIStackSettings.hpp"
 #include "AlliedVisionAlvium/PPSSync.hpp"
 #include "argparse/include/argparse/argparse.hpp"
 #include "PolCam.hpp"
@@ -78,7 +79,7 @@ void AlviumSyncCapture::run(
         std::cerr << "Unable to disable DeviceLinkThroughputLimit... Maximum framerate may be affected..." << std::endl;
     }
 
-    if (false == this->pps.enable(&this->camera, PPSSync::Line::LINE3, this->cameraPPSCallback, this))
+    if (false == this->pps.enable(&this->camera, AlliedVisionAlvium::Line::LINE0, this->cameraPPSCallback, this))
     {
         std::cerr << "Unable to enable PPS on camera... Something is wrong..." << std::endl;
     }
@@ -484,7 +485,7 @@ void AlviumSyncCapture::run(
                     this->lastRecievedImageMutex.unlock();
                     if (false == frame.empty())
                     {
-                        imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
                         this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                         this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                     }
@@ -497,6 +498,10 @@ void AlviumSyncCapture::run(
 
                 ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree", 800, 600);
                 ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle", 800, 600);
+                ImagePreviewWindow zero("0", 800, 600);
+                ImagePreviewWindow nintey("90", 800, 600);
+                ImagePreviewWindow onethreefive("135", 800, 600);
+                ImagePreviewWindow fourtyfive("45", 800, 600);
 
                 PolCam polCam;
 
@@ -527,10 +532,14 @@ void AlviumSyncCapture::run(
                             polarisationDegree,
                             polarisationAngle);
 
-                        imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value());
+                        imagePreview.setImageStreched(frame, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
 
-                        PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
-                        PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
+                        PolarisationDegreePreview.setImageStreched(polarisationDegree, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
+                        PolarisationAnglePreview.setImageStreched(polarisationAngle, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
+                        zero.setImageStreched(pol0, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
+                        nintey.setImageStreched(pol90, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
+                        onethreefive.setImageStreched(pol135, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
+                        fourtyfive.setImageStreched(pol45, this->controlScreen.cameraWindow->previewStretchSlider->value(), this->controlScreen.cameraWindow->previewMinStretchSlider->value());
 
                         this->controlScreen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
                         this->controlScreen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
@@ -588,6 +597,14 @@ void AlviumSyncCapture::frameReceviedFunction(
     lastGNSSLatitude = self->lastLatitude;
     lastGNSSAltitudeMSL = self->lastAltitudeMSL;
     self->gnssMutex.unlock();
+
+    if (true == self->stackEnabled)
+    {
+        self->stack.add(
+            frameData.image,
+            frameData.exposureTimeUs,
+            frameData.gainDb);
+    }
 
     if (self->isSavingEnabled.load())
     {
@@ -1139,6 +1156,7 @@ int main(int argc, const char **argv)
     {
         cameraName = parser.get<std::string>("cameraName");
     }
+
     polariser = parser.is_used("polarimetric");
 
     AlviumSyncCapture alviumSyncCapture;

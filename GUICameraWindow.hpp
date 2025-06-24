@@ -55,10 +55,14 @@ public:
         new nanogui::Label(this, "Camera Temperature:", "sans-bold");
         this->temperatureValue = new nanogui::FloatBox<double>(this, 0);
 
-        new nanogui::Label(this, "Preview Stretch:", "sans-bold");
+        new nanogui::Label(this, "Preview Max Stretch:", "sans-bold");
         previewStretchSlider = new nanogui::Slider(this);
         previewStretchSlider->setRange(std::pair<float, float>(0.01, 1));
         previewStretchSlider->setValue(1);
+        new nanogui::Label(this, "Preview Min Stretch:", "sans-bold");
+        previewMinStretchSlider = new nanogui::Slider(this);
+        previewMinStretchSlider->setRange(std::pair<float, float>(0, 4096));
+        previewMinStretchSlider->setValue(0);
     };
 
     nanogui::TextBox *pixelFormat = nullptr;
@@ -70,6 +74,7 @@ public:
     nanogui::IntBox<int> *framesSavedValue = nullptr;
     nanogui::FloatBox<double> *temperatureValue = nullptr;
     nanogui::Slider *previewStretchSlider = nullptr;
+    nanogui::Slider *previewMinStretchSlider = nullptr;
 
 private:
 };

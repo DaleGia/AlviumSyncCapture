@@ -17,6 +17,7 @@ set(AlviumSyncCapture_SOURCES
     AlliedVisionAlvium/AlliedVisionAlvium.cpp
     AlliedVisionAlvium/PPSSync.cpp
     AlliedVisionAlvium/GNSS.cpp
+    ImageTransientDetection/StackedImage.cpp
     PolCam.cpp)
 add_executable(AlviumSyncCapture ${AlviumSyncCapture_SOURCES})
 
@@ -29,8 +30,7 @@ set(AlviumSyncDetect_SOURCES
     AlliedVisionAlvium/GNSS.cpp
     ImageTransientDetection/ImageTransientDetection.cpp
     ImageTransientDetection/StackedImage.cpp
-    ImageTransientDetection/BrightObjectMasking.cpp
-    PolCam.cpp)
+    VideoTransientDetection)
 add_executable(AlviumSyncDetect ${AlviumSyncDetect_SOURCES})
 
 # # Add source files for executable 1
@@ -43,6 +43,9 @@ set(POLPROCESS_SOURCES
     test/PolCamProcess.cpp
     PolCam.cpp)
 add_executable(PolCamProcess ${POLPROCESS_SOURCES})
+
+find_package(Threads REQUIRED)
+target_link_libraries(PolCamProcess Threads::Threads)
 
 #########################ALLIED VISION VIMBAX STUFF ####################
 # add hardcoded guesses for the location of Vmb to CMAKE_PREFIX_PATH

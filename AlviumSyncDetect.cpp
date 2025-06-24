@@ -23,7 +23,6 @@
 /*****************************************************************************/
 AlviumSyncDetect::AlviumSyncDetect()
 {
-    this->imageTransientDetection.setDebugMode(false);
 
     /* Set what happens when the acquise image button is pushed */
     this->screen.capture->acquireButton->setCallback(
@@ -59,7 +58,7 @@ AlviumSyncDetect::AlviumSyncDetect()
                     this->screen.capture->RED);
 
                 /* start the camera acquisition */
-                if (true == this->camera.getSingleFrame(
+                if (true == this->camera.getSingleSyncedFrame(
                                 frame,
                                 ACQUIRESINGLEIMAGETIMEOUT_MS))
                 {
@@ -67,7 +66,7 @@ AlviumSyncDetect::AlviumSyncDetect()
                     ImagePreviewWindow singleFrame("Single Image", 800, 600);
                     try
                     {
-                        singleFrame.setImageStreched(frame.image, this->screen.cameraWindow->previewStretchSlider->value());
+                        singleFrame.setImageStreched(frame.image, this->screen.cameraWindow->previewStretchSlider->value(), this->screen.cameraWindow->previewMinStretchSlider->value());
                     }
                     catch (const std::exception &e)
                     {
@@ -340,74 +339,58 @@ AlviumSyncDetect::AlviumSyncDetect()
             return true;
         });
 
-    screen.detectionWindow->detectionMaxSize->setCallback(
-        [this](int value)
-        {
-            this->imageTransientDetection.setMaximumSize(value);
-        });
-
-    screen.detectionWindow->detectionMinSize->setCallback(
-        [this](int value)
-        {
-            this->imageTransientDetection.setMinimumSize(value);
-        });
-
-    screen.detectionWindow->detectionSigma->setCallback(
-        [this](int value)
-        {
-            this->imageTransientDetection.setSigma(value);
-        });
-
     screen.detectionWindow->detectionStackSize->setCallback(
         [this](int value)
         {
-            this->detectionInputStack.setStackAccumulatedExposure(value * 1000);
+            this->videoTransientDetection.setDetectionStackExposureTargetUs(value * 1000);
+        });
+
+    screen.detectionWindow->backgroundStackSize->setCallback(
+        [this](int value)
+        {
+            this->videoTransientDetection.setBackgroundStackExposureTargetUs(value * 1000);
         });
 
     screen.detectionWindow->prePostDetectionImages->setCallback(
         [this](int value)
         {
-            this->prePostDetectionBufferSize = value;
+            this->videoTransientDetection.setPrePostDetectionBufferSize(value);
         });
 
-    screen.detectionWindow->enableBrightMask->setCallback(
+    screen.detectionWindow->detectionSigma->setCallback(
+        [this](int value)
+        {
+            this->videoTransientDetection.setDetectionSigma(value);
+        });
+
+    screen.detectionWindow->detectionMinSize->setCallback(
+        [this](int value)
+        {
+            this->videoTransientDetection.setMinimumDetectionPixelSize(value);
+        });
+
+    screen.detectionWindow->detectionMaxSize->setCallback(
+        [this](int value)
+        {
+            this->videoTransientDetection.setMaximumDetectionPixelSize(value);
+        });
+
+    screen.detectionWindow->detectionMaxDuration.setCallback(
+        [this](int value)
+        {
+            this->videoTransientDetection.setMaximumDetectionIntervalS(value);
+        });
+
+    screen.detectionWindow->enableDebug->setCallback(
         [this](bool value)
         {
-            this->maskBrightObjects = value;
-            if (true == value)
-            {
-                this->brightObjectInputStack.setStackMode(StackedImage::ACCUMULATEDEXPOSURE);
-                this->brightObjectInputStack.setStackAccumulatedExposure(1000000);
-                this->brightObjectMasking.setSigma(3);
-                this->brightObjectMasking.setDilationKernalSize(50);
-                this->brightObjectMasking.setErosionKernalSize(2);
-                this->brightObjectInputStack.setNewStackCallback(
-                    [this](cv::Mat &image, double brightnessFactor)
-                    {
-                        this->newBrightObjectStackCallback(image, brightnessFactor);
-                    });
-            }
+            this->videoTransientDetection.setDebug(value);
         });
-
-    this->detectionInputStack.setStackMode(
-        StackedImage::StackedImage::ACCUMULATEDEXPOSURE);
-    this->detectionInputStack.setNewStackCallback(
-        [this](cv::Mat image, double brightnessFactor)
-        {
-            this->newInputStackCallback(image, brightnessFactor);
-        });
-    this->detectionInputStack.setStackAccumulatedExposure(this->screen.detectionWindow->detectionStackSize->value() * 1000);
-    this->imageTransientDetection.setSigma(this->screen.detectionWindow->detectionSigma->value());
-    this->imageTransientDetection.setMaximumSize(this->screen.detectionWindow->detectionMaxSize->value());
-    this->imageTransientDetection.setMinimumSize(this->screen.detectionWindow->detectionMinSize->value());
-    this->imageTransientDetection.setDebugMode(true);
 };
 
 void AlviumSyncDetect::run(
-    std::string name = "",
-    bool polarimetricFlag = false)
+    std::string name = "")
 {
-    polariserMode = polarimetricFlag;
     gnss.start(
         [this](
             double latitude,
@@ -463,119 +446,95 @@ void AlviumSyncDetect::run(
         this->screen.capture->connectedCamera->setValue(cameraName);
 
         /* Create the screen and update the connected camera */
-        this->enableExternalTriggering();
+        this->camera.enableSync();
         this->updateCameraCapture();
     }
+
+    this->videoTransientDetection.setDetectionSigma(this->screen.detectionWindow->detectionSigma->value());
+    this->videoTransientDetection.setMaximumDetectionPixelSize(this->screen.detectionWindow->detectionMaxSize->value());
+    this->videoTransientDetection.setMinimumDetectionPixelSize(this->screen.detectionWindow->detectionMinSize->value());
+    this->videoTransientDetection.setMaximumDetectionIntervalS(this->screen.detectionWindow->detectionMaxDuration->value());
+    this->videoTransientDetection.setDetectionStackExposureTargetUs(this->screen.detectionWindow->detectionStackSize->value() * 1000);
+    this->videoTransientDetection.setBackgroundStackExposureTargetUs(this->screen.detectionWindow->backgroundStackSize->value() * 1000);
+    this->videoTransientDetection.setPrePostDetectionBufferSize(this->screen.detectionWindow->prePostDetectionImages->value());
+    this->videoTransientDetection.disableDataReduction();
+    this->videoTransientDetection.setDebugMode(true);
+    this->videoTransientDetection.setDetectionCallback(
+        [this](
+            std::vector<DetectionFrame> preDetectionFrames,
+            std::vector<DetectionFrame> detectionFrames,
+            cv::Mat stackedDetectionImage,
+            int64_t startTime,
+            int64_t endTime)
+        {
+            this->detectionCount++;
+            this->screen.detectionWindow->detectionCount->setValue(this->detectionCount);
+
+            ImagePreviewWindow detection("Detection " + std::to_string(this->detectionCount), 800, 600);
+            detection.setImageStreched(this->stackedDetectionImage, 1, 0);
+            /* Reset the tail frame count for the next detection */
+
+            if (this->isSavingEnabled.load())
+            {
+                /* This goes in the callback function in the initialise function */
+
+                writeDetectionToFile(
+                    preDetectionFrames,
+                    detectionFrames,
+                    stackedDetectionImage,
+                    startTime,
+                    endTime,
+                    this);
+            }
+        });
 
     std::thread temperatureThread(
         [this]
         {
             while (!exitFlag.load())
             {
-                double sensor = 0;
-                double mainboard = 0;
-                getCameraTemperature(sensor, mainboard);
-                if (sensor != 0)
+                if (false == this->isImageReceptionEnabled)
                 {
-                    this->screen.cameraWindow->temperatureValue->setValue(sensor);
+                    double sensor = 0;
+                    double mainboard = 0;
+                    getCameraTemperature(sensor, mainboard);
+                    if (sensor != 0)
+                    {
+                        this->screen.cameraWindow->temperatureValue->setValue(sensor);
+                    }
+                    else if (mainboard != 0)
+                    {
+                        this->screen.cameraWindow->temperatureValue->setValue(mainboard);
+                    }
+                    else
+                    {
+                        this->screen.cameraWindow->temperatureValue->setValue(0);
+                    }
                 }
-                else if (mainboard != 0)
-                {
-                    this->screen.cameraWindow->temperatureValue->setValue(mainboard);
-                }
-                else
-                {
-                    this->screen.cameraWindow->temperatureValue->setValue(0);
-                }
-                sleep(20);
+                sleep(1);
             }
         });
 
     std::thread imagePreviewThread(
         [this]
         {
-            if (false == this->polariserMode)
+            ImagePreviewWindow imagePreview("Image Preview", 800, 600);
+
+            while (!exitFlag.load())
             {
-                ImagePreviewWindow imagePreview("Image Preview", 800, 600);
+                cv::Mat frame;
+                cv::Mat mask;
+                this->lastRecievedImageMutex.lock();
+                frame = this->lastRecievedImage.clone();
+                this->lastRecievedImageMutex.unlock();
 
-                while (!exitFlag.load())
+                if (false == frame.empty())
                 {
-                    cv::Mat frame;
-                    cv::Mat mask;
-                    this->lastRecievedImageMutex.lock();
-                    frame = this->lastRecievedImage.clone();
-                    this->lastRecievedImageMutex.unlock();
-                    if (this->maskBrightObjects)
-                    {
-                        this->brightObjectMaskmageMutex.lock();
-                        mask = this->brightObjectMask.clone();
-                        this->brightObjectMaskmageMutex.unlock();
-                        cv::Mat maskedFrame;
-
-                        if (false == mask.empty())
-                        {
-                            frame.copyTo(maskedFrame, mask);
-                            frame = maskedFrame;
-                        }
-                    }
-
-                    if (false == frame.empty())
-                    {
-                        imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
-                        this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
-                        this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
-                    }
-                    usleep(100000);
+                    imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value(), this->screen.cameraWindow->previewMinStretchSlider->value());
+                    this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
+                    this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
                 }
-            }
-            else
-            {
-                ImagePreviewWindow imagePreview("Image", 800, 600);
-
-                ImagePreviewWindow PolarisationDegreePreview("Polarisation Degree", 800, 600);
-                ImagePreviewWindow PolarisationAnglePreview("Polarisation Angle", 800, 600);
-
-                PolCam polCam;
-
-                while (!exitFlag.load())
-                {
-                    {
-                        cv::Mat frame;
-                        this->lastRecievedImageMutex.lock();
-                        frame = this->lastRecievedImage.clone();
-                        this->lastRecievedImageMutex.unlock();
-
-                        if (false == frame.empty())
-                        {
-                            cv::Mat pol0;
-                            cv::Mat pol45;
-                            cv::Mat pol90;
-                            cv::Mat pol135;
-                            cv::Mat intensity;
-                            cv::Mat polarisationDegree;
-                            cv::Mat polarisationAngle;
-
-                            polCam.getPolarisation(
-                                frame,
-                                pol0,
-                                pol45,
-                                pol90,
-                                pol135,
-                                intensity,
-                                polarisationDegree,
-                                polarisationAngle);
-
-                            imagePreview.setImageStreched(frame, this->screen.cameraWindow->previewStretchSlider->value());
-
-                            PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
-                            PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
-
-                            this->screen.cameraWindow->framesReceivedValue->setValue(this->receivedFramesCount);
-                            this->screen.cameraWindow->framesSavedValue->setValue(this->savedFramesCount);
-                        }
-                        usleep(100000);
-                    }
-                }
+                usleep(100000);
             }
         });
 
@@ -593,39 +552,7 @@ void AlviumSyncDetect::frameReceviedFunction(
     self->lastRecievedImageMutex.lock();
     self->lastRecievedImage = frameData.image.clone();
     self->lastRecievedImageMutex.unlock();
-
-    /* This makes sure there are images saved before and after detections */
-    if (true == self->detectionActiveFlag)
-    {
-        self->detectionTailFrameCount++;
-    }
-
-    /* Add the image to the input and background stacks */
-    double gain = std::pow(10.0, frameData.gainDb / 20.0);
-
-    self->detectionInputStack.add(
-        frameData.image,
-        frameData.exposureTimeUs,
-        gain);
-
-    if (false == self->detectionActiveFlag)
-    {
-        self->predetectionImages.get()->push(frameData);
-    }
-    else
-    {
-        self->detectionImagesLock.lock();
-        self->detectionImages.push_back(frameData);
-        self->detectionImagesLock.unlock();
-    }
-
-    if (self->maskBrightObjects)
-    {
-        self->brightObjectInputStack.add(
-            frameData.image,
-            frameData.exposureTimeUs,
-            gain);
-    }
+    self->videoTransientDetection.addImage(frameData);
 }
 
 void AlviumSyncDetect::updateCameraCapture(void)
@@ -682,20 +609,6 @@ bool AlviumSyncDetect::startImageAcquisition(void)
     /* We are not currently capturing... Lets start capturing*/
     /* update the currently captureured camera values */
     this->updateCameraCapture();
-
-    if (nullptr != this->predetectionImages.get())
-    {
-        this->predetectionImages.get()->clear();
-    }
-    this->detectionImages.clear();
-    this->detectionInputStack.reset();
-    this->detectionStack.release();
-    this->previousInputStack.release();
-    this->detectionActiveFlag = false;
-
-    this->prePostDetectionBufferSize =
-        this->screen.detectionWindow->prePostDetectionImages->value();
-    this->predetectionImages = std::make_unique<RingBuffer<AlliedVisionAlviumPPSSynchronisedFrameData>>(this->prePostDetectionBufferSize);
 
     /* start the camera acquisition */
     if (true == this->camera.startAcquisition(IMAGEBUFFERSIZE, AlviumSyncDetect::frameReceviedFunction, this))
@@ -783,100 +696,6 @@ bool AlviumSyncDetect::stopImageSaving(void)
     screen.capture->recordingButton->setBackgroundColor(
         screen.capture->GREEN);
     std::cout << "Stopped recording... " << std::endl;
-    return true;
-}
-
-bool AlviumSyncDetect::enableExternalTriggering(void)
-{
-    /* Disable image reception if it is going */
-    if (true == this->isImageReceptionEnabled.load())
-    {
-        this->stopImageAcquisition();
-    }
-
-    /* Configure the camera for external triggering */
-
-    if (false == this->camera.setFeature("LineSelector", "Line0"))
-    {
-        std::cerr << "Could not set LineSelector" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("LineMode", "Input"))
-    {
-        std::cerr << "Could not set LineMode" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("LineDebounceMode", "Off"))
-    {
-        std::cerr << "Could not set LineDebounceMode" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("TriggerSource", "Line0"))
-    {
-        std::cerr << "Could not set TriggerSource" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("TriggerActivation", "RisingEdge"))
-    {
-        std::cerr << "Could not set TriggerActivation" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("TriggerDelay", "0"))
-    {
-        std::cerr << "Could not set TriggerDelay" << std::endl;
-        return false;
-    }
-    else if (false == this->camera.setFeature("TriggerSelector", "FrameStart"))
-    {
-        std::cerr << "Could not set TriggerSelector" << std::endl;
-        return false;
-    }
-    // else if (false == this->camera.setFeature("TriggerMode", "On"))
-    // {
-    //     std::cerr << "Could not set TriggerMode" << std::endl;
-    //     return false;
-    // }
-    /* If we are here the camera is configured.*/
-
-    this->screen.screen->performLayout();
-    std::cout << "Triggering enabled... " << std::endl;
-
-    return true;
-}
-
-bool AlviumSyncDetect::disableExternalTriggering(void)
-{
-    std::string value;
-
-    /* Disable image reception if it is going */
-    if (true == this->isImageReceptionEnabled.load())
-    {
-        this->stopImageAcquisition();
-    }
-
-    /* Configure the camera for external triggering */
-
-    if (false == this->camera.setFeature("TriggerMode", "Off"))
-    {
-        std::cerr << "Could not set TriggerMode" << std::endl;
-        return false;
-    }
-
-    if (false == this->camera.getFeature("TriggerMode", value))
-    {
-        std::cerr << "Could not get TriggerMode" << std::endl;
-        return false;
-    }
-    else if ("Off" != value)
-    {
-        std::cerr << "TriggerMode is not Off. It is " << value << std::endl;
-        return false;
-    }
-
-    this->screen.screen->performLayout();
-    std::cout << "Triggering Disabled... " << std::endl;
-
-    updateCameraCapture();
     return true;
 }
 
@@ -992,230 +811,29 @@ uint64_t AlviumSyncDetect::systemClockToUTC(std::chrono::system_clock::time_poin
     return timestamp;
 };
 
-void AlviumSyncDetect::newInputStackCallback(
-    cv::Mat &stack,
-    double brightnessFactor)
+void AlviumSyncDetect::writeDetectionToFile(
+    std::vector<DetectionFrame> preDetectionFrames,
+    std::vector<DetectionFrame> detectionFrames,
+    cv::Mat stackedDetectionImage,
+    int64_t startTime,
+    int64_t endTime,
+    Application *app)
 {
-    bool ret;
-
-    cv::Mat frameA;
-    cv::Mat frameB;
-    cv::Mat finalA;
-    cv::Mat finalB;
-    cv::Mat mask;
-    brightObjectMaskmageMutex.lock();
-    mask = this->brightObjectMask.clone();
-    brightObjectMaskmageMutex.unlock();
-
-    /* Get the last input and see if it has been set yet*/
-    if (true == this->previousInputStack.empty())
-    {
-        /* If it is empty, let's set it here and wait for the next input stack*/
-        this->previousInputStack = stack.clone();
-        return;
-    }
-
-    if (true == mask.empty() &&
-        true == this->maskBrightObjects)
-    {
-        /* Wait for the bright object mask to be ready */
-        return;
-    }
-
-    /* If there is not any downsampling, just carry on */
-    frameA = stack;
-    frameB = this->previousInputStack;
-
-    /* Apply the combined mask */
-    if (false == mask.empty())
-    {
-        try
-        {
-            frameA.copyTo(finalA, mask);
-            frameB.copyTo(finalB, mask);
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << e.what() << '\n';
-        }
-    }
-    else
-    {
-        finalA = frameA;
-        finalB = frameB;
-    }
-
-    /* Copy the non-downsampled stack to use next time */
-    this->previousInputStack = stack.clone();
-
-    /* Perform the detection on the two frames. If it returns true, and bounding
-    box, centroid and detection size will be put in those parameters */
-    cv::Rect detectionBox;
-    ret = this->imageTransientDetection.detect(
-        finalA,
-        finalB,
-        detectionBox);
-
-    /* If this is true, a detection should start or continue */
-    if (true == ret)
-    {
-        this->detectionBoundingBox = detectionBox;
-        this->detectionTailFrameCount = 0;
-
-        /* If a detection is not active, activate it */
-        if (false == this->detectionActiveFlag)
-        {
-            this->startDetection();
-            /* Reset the detection stack */
-            this->detectionStack = cv::Mat::zeros(frameA.size(), CV_64F);
-        }
-        else
-        {
-            /* If a detection is still going, reset the detectiontail count and add to */
-            /* the detection stack image */
-            // cv::Mat diff;
-            // cv::absdiff(frameA, frameB, diff);
-            cv::accumulate(stack, this->detectionStack);
-        }
-    }
-    /* If it is not true, check if the tail count exceeds a certain value*/
-    else
-    {
-        /* This just updates the time in which the detection has stopped. */
-        /* If it is 0, it means we want to log the time as it may be the end of the detection (we will not know until the tail count has expired)*/
-        if (this->detectionTailFrameCount == 0)
-        {
-
-            this->detectionEndTime = std::time(nullptr);
-        }
-
-        /* If detection is active but a transient cannot be found, check how many frames */
-        /* have been received since the last transient was found */
-        if (true == this->detectionActiveFlag)
-        {
-            /* If it has been over a second, the detection is over... finalise everything */
-            if (this->detectionTailFrameCount > this->prePostDetectionBufferSize)
-            {
-                /* Set the detection flag to false */
-                auto tm = *std::gmtime(&this->detectionEndTime);
-                std::cout << "DETECTION STOPPED: " << std::put_time(&tm, "%d-%m-%Y %H-%M-%S") << std::endl;
-                this->detectionActiveFlag = false;
-                this->detectionTailFrameCount = 0;
-
-                this->detectionCount++;
-                this->screen.detectionWindow->detectionCount->setValue(this->detectionCount);
-
-                ImagePreviewWindow detection("Detection " + std::to_string(this->detectionCount), 800, 600);
-                detection.setImageStreched(this->detectionStack, 1);
-                /* Reset the tail frame count for the next detection */
-
-                if (this->isSavingEnabled.load())
-                {
-                    /* This goes in the callback function in the initialise function */
-
-                    writeDetectionToFile(
-                        this);
-
-                    // std::thread writeDetectionThread(
-                    //     writeDetectionToFile,
-                    //     this);
-                    // writeDetectionThread.detach();
-                }
-
-                this->detectionInputStack.reset();
-                this->previousInputStack.release();
-                if (nullptr != this->predetectionImages.get())
-                {
-                    this->predetectionImages.get()->clear();
-                }
-            }
-        }
-    }
-}
-
-void AlviumSyncDetect::newBrightObjectStackCallback(
-    cv::Mat &stack,
-    double brightnessFactor)
-{
-    /* Initalise the detection mask */
-    this->brightObjectMaskmageMutex.lock();
-    this->brightObjectMask = cv::Mat::zeros(stack.size(), CV_8U);
-    this->brightObjectMask = this->brightObjectMasking.getMask(stack);
-    this->brightObjectMaskmageMutex.unlock();
-}
-
-bool AlviumSyncDetect::startDetection()
-{
-    /* If a detection is already active, something is wrong, getouttahere*/
-    if (true == this->detectionActiveFlag)
-    {
-        std::cerr << "Detection is already active. Something might be wrong";
-        std::cerr << std::endl;
-        return false;
-    }
-    else
-    {
-        /* This flag is used internally to know to keep frames for saving */
-        this->detectionActiveFlag = true;
-    }
-
-    /* Get the time for the start of the detection */
-    this->detectionStartTime = std::time(nullptr);
-
-    if (true == this->detectionBoundingBox.empty())
-    {
-        std::cerr << "Detection Bounding Box is empty" << std::endl;
-    }
-    else
-    {
-        this->convertedDetectionBoundingBox = this->detectionBoundingBox;
-    }
-
-    detectionImagesLock.lock();
-    for (int i = 0; i < this->prePostDetectionBufferSize; i++)
-    {
-        AlliedVisionAlviumPPSSynchronisedFrameData preDetectionFrame;
-
-        // If this is true all is well.
-        if (true == this->predetectionImages->pop(preDetectionFrame))
-        {
-            this->detectionImages.push_back(preDetectionFrame);
-        }
-        /* If it is false, the buffer might not be full yet... get out of here*/
-        else
-        {
-            break;
-        }
-    }
-    detectionImagesLock.unlock();
-
-    auto tm = *std::gmtime(&this->detectionStartTime);
-    std::cout << "DETECTION STARTED: " << std::put_time(&tm, "%d-%m-%Y %H-%M-%S") << std::endl;
-
-    return true;
-}
-
-void AlviumSyncDetect::writeDetectionToFile(AlviumSyncDetect *app)
-{
-    app->detectionImagesLock.lock();
-
     std::string filepath;
     double sensorTemperature;
     double mainboardTemperature;
+    uint64_t sensorTimestamp;
+    uint64_t mainboardTimestamp;
     OpenCVFITS detectionFits;
 
-    double sensorTemp = 0;
-    double mainboardTemp = 0;
-    app->getCameraTemperature(sensorTemp, mainboardTemp);
+    app->temperatureMutex.lock();
+    mainboardTemperature = app->mainBoardTemperature;
+    sensorTemperature = app->sensorTemperature;
+    mainboardTimestamp = app->mainBoardTemperatureTimestamp;
+    sensorTimestamp = app->sensorTemperatureTimestamp;
+    app->temperatureMutex.unlock();
 
-    auto tm = *std::gmtime(&app->detectionStartTime);
-    std::stringstream ss;
-    ss << std::put_time(&tm, "%Y%m%d_%H%M%S");
-    std::string startTimeStr = ss.str();
-
-    filepath = app->currentSavePath + "/";
-    filepath += startTimeStr;
-    filepath += ".fits";
+    filepath = app->createDetectionDirectoryAndFilePath();
 
     /* Create the fits file*/
     if (false == detectionFits.createFITS(filepath))
@@ -1224,153 +842,446 @@ void AlviumSyncDetect::writeDetectionToFile(AlviumSyncDetect *app)
         return;
     }
 
-    cv::normalize(app->detectionStack, app->detectionStack, 0, 65535, cv::NORM_MINMAX, CV_16U);
+    cv::normalize(stackedDetectionImage, stackedDetectionImage, 0, 65535, cv::NORM_MINMAX, CV_16U);
     /* Add the detection stack to the fits file*/
-    if (false == detectionFits.addMat2FITS(app->detectionStack))
+    if (false == detectionFits.addMat2FITS(stackedDetectionImage))
     {
         std::cerr << "Could not add detectionStack to fits file " << filepath << std::endl;
         return;
     }
-    else if (false == detectionFits.addKey2FITS("detectionStartTime", app->detectionStartTime))
+    else if (false == detectionFits.addKey2FITS("detectionStartTime", startTime))
     {
-        std::cerr << "Could not add detectionStartTime starttime to fits file " << filepath + ".fits" << std::endl;
+        std::cerr << "Could not add detectionStartTime starttime to fits file " << filepath << std::endl;
         return;
     }
-    else if (false == detectionFits.addKey2FITS("detectionEndTime", app->detectionEndTime))
+    else if (false == detectionFits.addKey2FITS("detectionEndTime", endTime))
     {
-        std::cerr << "Could not add detectionEndTime endtime to fits file " << filepath + ".fits" << std::endl;
+        std::cerr << "Could not add detectionEndTime endtime to fits file " << filepath << std::endl;
         return;
     }
 
-    /* Now write all of the detection image */
-    for (int i = 0; i < app->detectionImages.size(); i++)
+    cv::Mat image;
+
+    /* Now write all of the predetection images */
+    for (int i = 0; i < preDetectionFrames.size(); i++)
     {
-        cv::Mat image;
-        if (false == detectionFits.addMat2FITS(app->detectionImages.at(i).image))
+        if (false == detectionFits.addMat2FITS(preDetectionFrames.at(i).frameData.image))
         {
             std::cerr << "Could not add image to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("ExposureTime", app->detectionImages.at(i).exposureTimeUs))
+        else if (false == detectionFits.addKey2FITS("ExposureTime", preDetectionFrames.at(i).frameData.exposureTimeUs))
         {
             std::cerr << "Could not add ExposureTime to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("Gain", app->detectionImages.at(i).gainDb))
+        else if (false == detectionFits.addKey2FITS("Gain", preDetectionFrames.at(i).frameData.gainDb))
         {
             std::cerr << "Could not add Gain to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("SensorTemperature", sensorTemp))
+        else if (false == detectionFits.addKey2FITS("SensorTemperature", sensorTemperature))
         {
             std::cerr << "Could not add SensorTemperature to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("mainboardTemperature", mainboardTemp))
+        else if (false == detectionFits.addKey2FITS("SensorTemperatureTimestamp", sensorTimestamp))
+        {
+            std::cerr << "Could not add SensorTemperatureTimestamp to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("mainboardTemperature", mainboardTemperature))
         {
             std::cerr << "Could not add mainboardTemperature to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("FrameID", app->detectionImages.at(i).cameraFrameId))
+        else if (false == detectionFits.addKey2FITS("mainboardTemperatureTimestamp", mainboardTimestamp))
+        {
+            std::cerr << "Could not add mainboardTemperatureTimestamp to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("FrameID", preDetectionFrames.at(i).frameData.cameraFrameId))
         {
             std::cerr << "Could not add FrameID to fits file " << filepath << std::endl;
             return;
         }
-        else if (false == detectionFits.addKey2FITS("cameraFrameStartTimestamp", app->detectionImages.at(i).cameraFrameStartTimestamp))
+        else if (false == detectionFits.addKey2FITS("cameraFrameStartTimestamp", preDetectionFrames.at(i).frameData.cameraFrameStartTimestamp))
         {
             std::cerr << "Could not add cameraFrameStartTimestamp to fits file " << std::endl;
         }
         else if (false == detectionFits.addKey2FITS(
                               "systemImageReceptionTimestampUTC",
-                              app->detectionImages.at(i).systemImageReceivedTimestamp))
+                              preDetectionFrames.at(i).frameData.systemImageReceivedTimestamp))
         {
             std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
         }
+        else if (false == detectionFits.addKey2FITS("detectionX", (int64_t)preDetectionFrames.at(i).detectionBoundingBox.x))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionY", (int64_t)preDetectionFrames.at(i).detectionBoundingBox.y))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionWidth", (int64_t)preDetectionFrames.at(i).detectionBoundingBox.width))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionHeight", (int64_t)preDetectionFrames.at(i).detectionBoundingBox.height))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropX", (int64_t)preDetectionFrames.at(i).cropBox.x))
+        {
+            std::cerr << "Could not add y to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropY", (int64_t)preDetectionFrames.at(i).cropBox.y))
+        {
+            std::cerr << "Could not add size to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropWidth", (int64_t)preDetectionFrames.at(i).cropBox.width))
+        {
+            std::cerr << "Could not add y to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropHeight", (int64_t)preDetectionFrames.at(i).cropBox.height))
+        {
+            std::cerr << "Could not add size to fits file " << filepath << std::endl;
+            return;
+        }
         else if (false == detectionFits.addKey2FITS(
                               "lastSystemTimeAtCameraPPSTimestamp",
-                              app->detectionImages.at(i).systemTimestampAtLastPPS))
+                              preDetectionFrames.at(i).frameData.systemTimestampAtLastPPS))
         {
             std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
         }
         else if (false == detectionFits.addKey2FITS(
                               "lastSystemTimeJitterAtCameraPPSuS",
-                              app->detectionImages.at(i).systemJitterAtLastPPS))
+                              preDetectionFrames.at(i).frameData.systemJitterAtLastPPS))
         {
             std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
         }
         else if (false == detectionFits.addKey2FITS(
                               "lastCameraPPSTimestamp",
-                              app->detectionImages.at(i).cameraTimestampAtLastPPS))
+                              preDetectionFrames.at(i).frameData.cameraTimestampAtLastPPS))
         {
             std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
         }
         else if (false == detectionFits.addKey2FITS(
                               "lastCameraTimeJitterAtCameraPPSuS",
-                              app->detectionImages.at(i).cameraJitterAtLastCameraPPS))
+                              preDetectionFrames.at(i).frameData.cameraJitterAtLastCameraPPS))
         {
             std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
         }
-        else if (false == detectionFits.addKey2FITS("lastGNSSPPSTimestamp", app->detectionImages.at(i).lastGNSStimestamp))
+        else if (false == detectionFits.addKey2FITS("lastGNSSPPSTimestamp", preDetectionFrames.at(i).frameData.lastGNSStimestamp))
         {
             std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
         }
-        else if (false == detectionFits.addKey2FITS("lastLatitude", app->detectionImages.at(i).lastGNSSLatitude))
+        else if (false == detectionFits.addKey2FITS("lastLatitude", preDetectionFrames.at(i).frameData.lastGNSSLatitude))
         {
             std::cerr << "Could not add lastLatitude to fits file " << std::endl;
         }
-        else if (false == detectionFits.addKey2FITS("lastLongitude", app->detectionImages.at(i).lastGNSSLongitude))
+        else if (false == detectionFits.addKey2FITS("lastLongitude", preDetectionFrames.at(i).frameData.lastGNSSLongitude))
         {
             std::cerr << "Could not add lastLatitude to fits file " << std::endl;
         }
-        else if (false == detectionFits.addKey2FITS("lastAltitudeMSL", app->detectionImages.at(i).lastGNSSAltitudeMSL))
+        else if (false == detectionFits.addKey2FITS("lastAltitudeMSL", preDetectionFrames.at(i).frameData.lastGNSSAltitudeMSL))
+        {
+            std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
+        }
+    }
+    /* Now write all of the detection image */
+    for (int i = 0; i < detectionFrames.size(); i++)
+    {
+        if (false == detectionFits.addMat2FITS(detectionFrames.at(i).frameData.image))
+        {
+            std::cerr << "Could not add image to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("ExposureTime", detectionFrames.at(i).frameData.exposureTimeUs))
+        {
+            std::cerr << "Could not add ExposureTime to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("Gain", detectionFrames.at(i).frameData.gainDb))
+        {
+            std::cerr << "Could not add Gain to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("SensorTemperature", sensorTemperature))
+        {
+            std::cerr << "Could not add SensorTemperature to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("SensorTemperatureTimestamp", sensorTimestamp))
+        {
+            std::cerr << "Could not add SensorTemperatureTimestamp to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("mainboardTemperature", mainboardTemperature))
+        {
+            std::cerr << "Could not add mainboardTemperature to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("mainboardTemperatureTimestamp", mainboardTimestamp))
+        {
+            std::cerr << "Could not add mainboardTemperatureTimestamp to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("FrameID", detectionFrames.at(i).frameData.cameraFrameId))
+        {
+            std::cerr << "Could not add FrameID to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cameraFrameStartTimestamp", detectionFrames.at(i).frameData.cameraFrameStartTimestamp))
+        {
+            std::cerr << "Could not add cameraFrameStartTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "systemImageReceptionTimestampUTC",
+                              detectionFrames.at(i).frameData.systemImageReceivedTimestamp))
+        {
+            std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionX", (int64_t)detectionFrames.at(i).detectionBoundingBox.x))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionY", (int64_t)detectionFrames.at(i).detectionBoundingBox.y))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionWidth", (int64_t)detectionFrames.at(i).detectionBoundingBox.width))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("detectionHeight", (int64_t)detectionFrames.at(i).detectionBoundingBox.height))
+        {
+            std::cerr << "Could not add boundingBoxX to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropX", (int64_t)detectionFrames.at(i).cropBox.x))
+        {
+            std::cerr << "Could not add y to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropY", (int64_t)detectionFrames.at(i).cropBox.y))
+        {
+            std::cerr << "Could not add size to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropWidth", (int64_t)detectionFrames.at(i).cropBox.width))
+        {
+            std::cerr << "Could not add y to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS("cropHeight", (int64_t)detectionFrames.at(i).cropBox.height))
+        {
+            std::cerr << "Could not add size to fits file " << filepath << std::endl;
+            return;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "lastSystemTimeAtCameraPPSTimestamp",
+                              detectionFrames.at(i).frameData.systemTimestampAtLastPPS))
+        {
+            std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "lastSystemTimeJitterAtCameraPPSuS",
+                              detectionFrames.at(i).frameData.systemJitterAtLastPPS))
+        {
+            std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "lastCameraPPSTimestamp",
+                              detectionFrames.at(i).frameData.cameraTimestampAtLastPPS))
+        {
+            std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "lastCameraTimeJitterAtCameraPPSuS",
+                              detectionFrames.at(i).frameData.cameraJitterAtLastCameraPPS))
+        {
+            std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastGNSSPPSTimestamp", detectionFrames.at(i).frameData.lastGNSStimestamp))
+        {
+            std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastLatitude", detectionFrames.at(i).frameData.lastGNSSLatitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastLongitude", detectionFrames.at(i).frameData.lastGNSSLongitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastAltitudeMSL", detectionFrames.at(i).frameData.lastGNSSAltitudeMSL))
         {
             std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
         }
     }
 
-    detectionFits.closeFITS();
+    if (false == app->noCalibrationMode)
+    {
+        /* Lock the calibration image so we can write it to the file */
+        app->lastcalibrationImageMutex.lock();
 
-    // if (true == app->polariserMode)
-    // {
-    //     PolCam polCam;
+        if (false == detectionFits.addMat2FITS(app->lastCalibrationImage.image))
+        {
+            std::cerr << "Could not add image to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("ExposureTime", app->lastCalibrationImage.exposureTimeUs))
+        {
+            std::cerr << "Could not add ExposureTime to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("Gain", app->lastCalibrationImage.gainDb))
+        {
+            std::cerr << "Could not add Gain to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("sensorTemperature", sensorTemperature))
+        {
+            std::cerr << "Could not add sensorTemperature to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("mainboardTemperature", mainboardTemperature))
+        {
+            std::cerr << "Could not add mainboardTemperature to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("FrameID", app->lastCalibrationImage.cameraFrameId))
+        {
+            std::cerr << "Could not add FrameID to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("cameraFrameStartTimestamp", app->lastCalibrationImage.cameraFrameStartTimestamp))
+        {
+            std::cerr << "Could not add cameraImageTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS(
+                              "systemImageReceptionTimestampUTC",
+                              app->lastCalibrationImage.systemImageReceivedTimestamp))
+        {
+            std::cerr << "Could not add systemImageReceptionTimestampUTC to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastSystemTimeAtCameraPPSTimestamp", app->lastCalibrationImage.systemTimestampAtLastPPS))
+        {
+            std::cerr << "Could not add lastSystemTimeAtCameraPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastSystemTimeJitterAtCameraPPSuS", app->lastCalibrationImage.systemJitterAtLastPPS))
+        {
+            std::cerr << "Could not add lastSystemTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastCameraPPSTimestamp", app->lastCalibrationImage.cameraTimestampAtLastPPS))
+        {
+            std::cerr << "Could not add lastCameraPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastCameraTimeJitterAtCameraPPSuS", app->lastCalibrationImage.cameraJitterAtLastCameraPPS))
+        {
+            std::cerr << "Could not add lastCameraTimeJitterAtCameraPPSuS to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastGNSSPPSTimestamp", app->lastCalibrationImage.lastGNSStimestamp))
+        {
+            std::cerr << "Could not add lastGNSSPPSTimestamp to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastLatitude", app->lastCalibrationImage.lastGNSSLatitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastLongitude", app->lastCalibrationImage.lastGNSSLongitude))
+        {
+            std::cerr << "Could not add lastLatitude to fits file " << std::endl;
+        }
+        else if (false == detectionFits.addKey2FITS("lastAltitudeMSL", app->lastCalibrationImage.lastGNSSAltitudeMSL))
+        {
+            std::cerr << "Could not add lastAltitudeMSL to fits file " << std::endl;
+        }
 
-    //     cv::Mat pol0;
-    //     cv::Mat pol45;
-    //     cv::Mat pol90;
-    //     cv::Mat pol135;
-    //     cv::Mat intensity;
-    //     cv::Mat polarisationDegree;
-    //     cv::Mat polarisationAngle;
+        app->lastcalibrationImageMutex.unlock();
+    }
 
-    //     polCam.getPolarisation(
-    //         frame,
-    //         pol0,
-    //         pol45,
-    //         pol90,
-    //         pol135,
-    //         intensity,
-    //         polarisationDegree,
-    //         polarisationAngle);
+    if (true == detectionFits.closeFITS())
+    {
+        std::cout << "Saved detection image to " << filepath << std::endl;
+    }
 
-    //     cv::normalize(polarisationDegree, polarisationDegree, 0, 255, cv::NORM_MINMAX);
-    //     polarisationDegree.convertTo(
-    //         polarisationDegree,
-    //         CV_8UC3);
-    //     cv::applyColorMap(polarisationDegree, polarisationDegree, cv::COLORMAP_JET);
-    //     PolarisationDegreePreview.setImageStreched(polarisationDegree, 1);
+    try
+    {
+        /* code */
 
-    //     cv::normalize(polarisationAngle, polarisationAngle, 0, 255, cv::NORM_MINMAX);
-    //     polarisationAngle.convertTo(
-    //         polarisationAngle,
-    //         CV_8UC3);
-    //     cv::applyColorMap(polarisationAngle, polarisationAngle, cv::COLORMAP_JET);
-    //     PolarisationAnglePreview.setImageStreched(polarisationAngle, 1);
-    // }
+        std::string mp4filepath = filepath + ".mp4";
+        cv::VideoWriter writer;
+        int codec = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+        cv::Size frameSize = cv::Size(250, 250);
 
-    app->detectionImages.clear();
-    app->detectionStack.release();
+        int fps = 30;
+        if (0 < app->cameraFrameRate)
+        {
+            fps = app->cameraFrameRate;
+        }
+        writer.open(mp4filepath, codec, fps, frameSize, false);
+        if (!writer.isOpened())
+        {
+            std::cerr << "Could not open the output video file for write: " << mp4filepath << std::endl;
+            return;
+        }
 
-    app->detectionImagesLock.unlock();
+        /* Now write all of the detection image */
+        for (int i = 1; i < preDetectionFrames.size() - 1; i++)
+        {
+            cv::Mat stretchedFrame;
+            cv::resize(preDetectionFrames.at(i).frameData.image, stretchedFrame, frameSize);
+            cv::normalize(stretchedFrame, stretchedFrame, 0, 255, cv::NORM_MINMAX, CV_8U);
+            if (stretchedFrame.empty())
+            {
+                std::cerr << "Warning: Stretched frame " << i << " is empty. Skipping." << std::endl;
+                continue;
+            }
+
+            writer.write(stretchedFrame);
+        }
+
+        /* Now write all of the detection image */
+        for (int i = 1; i < detectionFrames.size() - 1; i++)
+        {
+            cv::Mat stretchedFrame;
+            cv::resize(detectionFrames.at(i).frameData.image, stretchedFrame, frameSize);
+            cv::normalize(stretchedFrame, stretchedFrame, 0, 255, cv::NORM_MINMAX, CV_8U);
+            if (stretchedFrame.empty())
+            {
+                std::cerr << "Warning: Stretched frame " << i << " is empty. Skipping." << std::endl;
+                continue;
+            }
+
+            writer.write(stretchedFrame);
+        }
+
+        writer.release(); // Release the VideoWriter
+        std::cout << "Finished writing video to " << filepath << std::endl;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Unable to write video file: " << filepath << ": " << e.what() << '\n';
+    }
+
+    try
+    {
+        std::string command;
+        command = "python3 /usr/local/bin/BlueSkyReportingV2.py ";
+        command += filepath;
+        system(command.c_str());
+        std::cout << "Posted detection to bluesky" << std::endl;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Unable to post to bluesky: " << filepath << ": " << e.what() << '\n';
+    }
 }
 
 int main(int argc, const char **argv)
@@ -1405,9 +1316,8 @@ int main(int argc, const char **argv)
     {
         cameraName = parser.get<std::string>("cameraName");
     }
-    polariser = parser.is_used("polarimetric");
 
     AlviumSyncDetect AlviumSyncDetect;
-    AlviumSyncDetect.run(cameraName, polariser);
+    AlviumSyncDetect.run(cameraName);
     return 1;
 }
