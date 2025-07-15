@@ -3,14 +3,14 @@ git submodule update --init --recursive
 cd AlliedVisionAlvium
 
 # Installs Allied Vision VimbaX and Camera Drivers
-git clone  https://github.com/DaleGia/AlliedVisionVimbaX.git
-cd AlliedVisionVimbaX
-tar -xzvf VimbaX_Setup-2024-1-Linux64.tar.gz
-sudo cp -r VimbaX_2024-1 /usr/local/lib/VimbaX
-cd ..
-rm -r AlliedVisionVimbaX
-sudo sh /usr/local/lib/VimbaX/cti/Install_GenTL_Path.sh
-sudo ldconfig
+#git clone  https://github.com/DaleGia/AlliedVisionVimbaX.git
+#cd AlliedVisionVimbaX
+#tar -xzvf VimbaX_Setup-2024-1-Linux64.tar.gz
+#sudo cp -r VimbaX_2024-1 /usr/local/lib/VimbaX
+#cd ..
+#rm -r AlliedVisionVimbaX
+#sudo sh /usr/local/lib/VimbaX/cti/Install_GenTL_Path.sh
+#sudo ldconfig
 
 
 #Installs required dependencies

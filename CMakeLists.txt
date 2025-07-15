@@ -31,7 +31,7 @@ set(AlviumSyncDetect_SOURCES
     ImageTransientDetection/ImageTransientDetection.cpp
     ImageTransientDetection/StackedImage.cpp
     VideoTransientDetection)
-add_executable(AlviumSyncDetect ${AlviumSyncDetect_SOURCES})
+#add_executable(AlviumSyncDetect ${AlviumSyncDetect_SOURCES})
 
 # # Add source files for executable 1
 set(POLTEST_SOURCES
@@ -59,8 +59,8 @@ find_package(Vmb REQUIRED COMPONENTS CPP)
 find_package(Vmb REQUIRED COMPONENTS ImageTransform)
 target_link_libraries(AlviumSyncCapture nanogui Vmb::CPP)
 target_link_libraries(AlviumSyncCapture nanogui Vmb::ImageTransform)
-target_link_libraries(AlviumSyncDetect nanogui Vmb::CPP)
-target_link_libraries(AlviumSyncDetect nanogui Vmb::ImageTransform)
+#target_link_libraries(AlviumSyncDetect nanogui Vmb::CPP)
+#target_link_libraries(AlviumSyncDetect nanogui Vmb::ImageTransform)
 
 ############## nanogui STUFF ########################################
 # Disable building extras we won't need (pure C++ project)
@@ -85,13 +85,13 @@ include_directories(nanogui/include)
 # Lastly, additional libraries may have been built for you.  In addition to linking
 # against NanoGUI, we need to link against those as well.
 target_link_libraries(AlviumSyncCapture nanogui ${NANOGUI_EXTRA_LIBS})
-target_link_libraries(AlviumSyncDetect nanogui ${NANOGUI_EXTRA_LIBS})
+#target_link_libraries(AlviumSyncDetect nanogui ${NANOGUI_EXTRA_LIBS})
 
 ############## OpenCV STUFF ########################################
 find_package(OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 target_link_libraries(AlviumSyncCapture ${OpenCV_LIBS} )
-target_link_libraries(AlviumSyncDetect ${OpenCV_LIBS} )
+#target_link_libraries(AlviumSyncDetect ${OpenCV_LIBS} )
 target_link_libraries(PolCamTest ${OpenCV_LIBS} )
 target_link_libraries(PolCamProcess ${OpenCV_LIBS} )
 
@@ -118,12 +118,12 @@ ENDIF(GPSD_FOUND)
 
 include_directories( ${GPSD_INCLUDE_DIRS} )
 target_link_libraries(AlviumSyncCapture ${GPSD_LIBS} )
-target_link_libraries(AlviumSyncDetect ${GPSD_LIBS} )
+#target_link_libraries(AlviumSyncDetect ${GPSD_LIBS} )
 
 ##################################################################
 
 ############## cfitsio ############################################
 target_link_libraries(AlviumSyncCapture  "cfitsio")
-target_link_libraries(AlviumSyncDetect "cfitsio")
+#target_link_libraries(AlviumSyncDetect "cfitsio")
 target_link_libraries(PolCamTest "cfitsio")
 target_link_libraries(PolCamProcess "cfitsio")
